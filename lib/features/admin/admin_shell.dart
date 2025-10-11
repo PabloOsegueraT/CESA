@@ -39,7 +39,10 @@ class _AdminShellState extends State<AdminShell> {
       const AdminDashboardScreen(),
       AdminTasksScreen(tasks: tasks, adminName: 'Admin'),
       AdminCalendarScreen(tasks: tasks),
-      AdminForumsScreen(key: _forumsKey), // <- con key
+      AdminForumsScreen(                    // ← antes: AdminForumsScreen(key: _forumsKey)
+        key: _forumsKey,
+        assignees: assignees,               // ← INYECTA LA LISTA
+      ),
       const _AdminMoreScreen(),
     ];
 

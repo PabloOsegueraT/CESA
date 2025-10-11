@@ -6,6 +6,12 @@ class Forum {
   int messagesCount;
   DateTime lastUpdated;
 
+  /// Si es para todos los usuarios (true) o sólo para un subconjunto (false)
+  bool forAll;
+
+  /// Nombres de usuarios participantes (se usa si forAll == false)
+  List<String> members;
+
   Forum({
     required this.id,
     required this.title,
@@ -13,8 +19,12 @@ class Forum {
     this.closed = false,
     this.messagesCount = 0,
     DateTime? lastUpdated,
-  }) : lastUpdated = lastUpdated ?? DateTime.now();
+    this.forAll = true,
+    List<String>? members,
+  })  : members = members ?? <String>[],
+        lastUpdated = lastUpdated ?? DateTime.now();
 }
+
 
 class ForumMessage {
   final String id;
