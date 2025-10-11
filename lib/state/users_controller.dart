@@ -17,6 +17,19 @@ class UsersController extends ChangeNotifier {
     _users.insert(0, u);
     notifyListeners();
   }
+
+  void removeUser(String id) {
+    _users.removeWhere((u) => u.id == id);
+    notifyListeners();
+  }
+
+  void updatePassword(String id, String newPassword) {
+    final idx = _users.indexWhere((u) => u.id == id);
+    if (idx == -1) return;
+    _users[idx] = _users[idx].copyWith(password: newPassword);
+    notifyListeners();
+  }
+
 }
 
 class UsersControllerProvider extends InheritedNotifier<UsersController> {

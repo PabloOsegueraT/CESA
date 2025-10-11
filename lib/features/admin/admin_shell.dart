@@ -154,9 +154,10 @@ class _AdminMoreScreen extends StatelessWidget {
             onTap: () => Navigator.of(context).pushNamed('/settings'),
           ),
           ListTile(
-            leading: const Icon(Icons.person_add_alt_1_outlined),
-            title: const Text('Crear usuario'),
-            onTap: () => Navigator.of(context).pushNamed('/create-user'),
+            leading: const Icon(Icons.group_outlined),
+            title: const Text('Usuarios'),
+            subtitle: const Text('Ver, crear, eliminar, cambiar contraseñas'),
+            onTap: () => Navigator.of(context).pushNamed('/admin-users'),
           ),
           ListTile(
             leading: const Icon(Icons.logout),

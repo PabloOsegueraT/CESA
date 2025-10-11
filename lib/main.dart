@@ -9,6 +9,8 @@ import 'features/settings/profile_screen.dart';
 import 'state/profile_controller.dart';
 import 'state/users_controller.dart';
 import 'features/admin/screens/create_user_screen.dart';
+import 'features/admin/screens/users_screen.dart';
+
 
 
 void main() {
@@ -33,6 +35,8 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
       controller: _theme,
       child: ProfileControllerProvider( // <- ENVUELVE A MaterialApp
         controller: _profile,
+        child: UsersControllerProvider(                       // <-- ENVUELVE AQUÍ
+          controller: _users,
         child: AnimatedBuilder(
           animation: _theme,
           builder: (context, _) {
@@ -49,12 +53,14 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
                 '/user': (_) => const UserShell(),
                 '/settings': (_) => const SettingsScreen(),
                 '/profile': (_) => const ProfileScreen(), // <- RUTA EXISTE
+                '/admin-users': (_) => const AdminUsersScreen(),
                 '/create-user': (_) => const CreateUserScreen(), // <-- NUEVA RUTA
               },
             );
           },
         ),
       ),
+    )
     );
   }
 }
