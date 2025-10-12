@@ -10,6 +10,9 @@ import 'state/profile_controller.dart';
 import 'state/users_controller.dart';
 import 'features/admin/screens/create_user_screen.dart';
 import 'features/admin/screens/users_screen.dart';
+import 'state/notifications_controller.dart';
+import 'features/notifications/notifications_screen.dart';
+
 
 
 
@@ -27,6 +30,8 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
   final ThemeController _theme = ThemeController();
   final ProfileController _profile = ProfileController(); // <-- NUEVO
   final UsersController _users = UsersController(); // NUEVO
+  final NotificationsController _notifications = NotificationsController();
+
 
 
   @override
@@ -37,6 +42,8 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
         controller: _profile,
         child: UsersControllerProvider(                       // <-- ENVUELVE AQUÍ
           controller: _users,
+          child: NotificationsControllerProvider(          // ← NUEVO
+            controller: _notifications,
         child: AnimatedBuilder(
           animation: _theme,
           builder: (context, _) {
@@ -55,11 +62,13 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
                 '/profile': (_) => const ProfileScreen(), // <- RUTA EXISTE
                 '/admin-users': (_) => const AdminUsersScreen(),
                 '/create-user': (_) => const CreateUserScreen(), // <-- NUEVA RUTA
+                '/notifications': (_) => const NotificationsScreen(),
               },
             );
           },
         ),
       ),
+    )
     )
     );
   }

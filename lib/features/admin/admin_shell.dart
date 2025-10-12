@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/task.dart';
 import '../../design_system/widgets/task_card.dart';
+import '../../state/notifications_controller.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/forums_screen.dart';
@@ -147,7 +148,16 @@ class _AdminMoreScreen extends StatelessWidget {
             title: const Text('Perfil'),
             onTap: () => Navigator.of(context).pushNamed('/profile'),
           ),
-          const ListTile(leading: Icon(Icons.notifications_none), title: Text('Notificaciones')),
+          ListTile(
+            leading: Badge(
+              isLabelVisible: NotificationsControllerProvider.of(context).unreadCount > 0,
+              label: Text('${NotificationsControllerProvider.of(context).unreadCount}'),
+              child: const Icon(Icons.notifications_none),
+            ),
+            title: const Text('Notificaciones'),
+            onTap: () => Navigator.of(context).pushNamed('/notifications'),
+          ),
+
           ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Ajustes'),
