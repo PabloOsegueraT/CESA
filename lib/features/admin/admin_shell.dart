@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/task.dart';
 import '../../design_system/widgets/task_card.dart';
+import '../../state/auth_controller.dart';
 import '../../state/notifications_controller.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/calendar_screen.dart';
@@ -139,46 +140,57 @@ class _AdminMoreScreen extends StatelessWidget {
   const _AdminMoreScreen();
   @override
   Widget build(BuildContext context) {
+    final auth = AuthControllerProvider.of(context);
+
     return ListView(
       padding: const EdgeInsets.all(16),
-        children: [
-          // Reemplaza la opción Perfil para que navegue:
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('Perfil'),
-            onTap: () => Navigator.of(context).pushNamed('/profile'),
-          ),
-          ListTile(
-            leading: Badge(
-              isLabelVisible: NotificationsControllerProvider.of(context).unreadCount > 0,
-              label: Text('${NotificationsControllerProvider.of(context).unreadCount}'),
-              child: const Icon(Icons.notifications_none),
-            ),
-            title: const Text('Notificaciones'),
-            onTap: () => Navigator.of(context).pushNamed('/notifications'),
-          ),
+      children: [
+        // Perfil
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: const Text('Perfil'),
+          onTap: () => Navigator.of(context).pushNamed('/profile'),
+        ),
 
-          ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('Ajustes'),
-            onTap: () => Navigator.of(context).pushNamed('/settings'),
-          ),
+        // Ajustes
+        ListTile(
+          leading: const Icon(Icons.settings_outlined),
+          title: const Text('Ajustes'),
+          onTap: () => Navigator.of(context).pushNamed('/settings'),
+        ),
+
+        // Notificaciones (con globo si ya lo tienes)
+        ListTile(
+          leading: const Icon(Icons.notifications_none),
+          title: const Text('Notificaciones'),
+          onTap: () => Navigator.of(context).pushNamed('/notifications'),
+        ),
+
+        // --- Sección Usuarios (visible para Root y Admin) ---
+        if (auth.canSeeUsersModule) ...[
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.group_outlined),
             title: const Text('Usuarios'),
-            subtitle: const Text('Ver, crear, eliminar, cambiar contraseñas'),
+            subtitle: Text(auth.isRoot
+                ? 'Ver, crear, eliminar, cambiar contraseñas'
+                : 'Ver'), // <- AJUSTA EL SUBTÍTULO
             onTap: () => Navigator.of(context).pushNamed('/admin-users'),
           ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Cerrar sesión'),
-            onTap: () => _confirmLogout(context), // <-- antes navegabas directo
-          ),
+        ],
 
-        ]
 
+        const Divider(),
+        // Cerrar sesión (con confirmación)
+        ListTile(
+          leading: const Icon(Icons.logout),
+          title: const Text('Cerrar sesión'),
+          onTap: () => _confirmLogout(context),
+        ),
+      ],
     );
   }
+
 }
 Future<void> _confirmLogout(BuildContext context) async {
   final bool? ok = await showDialog<bool>(
