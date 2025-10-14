@@ -12,6 +12,7 @@ import 'features/admin/screens/create_user_screen.dart';
 import 'features/admin/screens/users_screen.dart';
 import 'state/notifications_controller.dart';
 import 'features/notifications/notifications_screen.dart';
+import 'state/auth_controller.dart';
 
 
 
@@ -31,7 +32,7 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
   final ProfileController _profile = ProfileController(); // <-- NUEVO
   final UsersController _users = UsersController(); // NUEVO
   final NotificationsController _notifications = NotificationsController();
-
+  final AuthController _auth = AuthController();
 
 
   @override
@@ -44,6 +45,8 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
           controller: _users,
           child: NotificationsControllerProvider(          // ← NUEVO
             controller: _notifications,
+            child: AuthControllerProvider(
+              controller: _auth,
         child: AnimatedBuilder(
           animation: _theme,
           builder: (context, _) {
@@ -59,15 +62,16 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
                 '/admin': (_) => const AdminShell(),
                 '/user': (_) => const UserShell(),
                 '/settings': (_) => const SettingsScreen(),
-                '/profile': (_) => const ProfileScreen(), // <- RUTA EXISTE
+                '/profile': (_) => const ProfileScreen(),
+                '/create-user': (_) => const CreateUserScreen(),
                 '/admin-users': (_) => const AdminUsersScreen(),
-                '/create-user': (_) => const CreateUserScreen(), // <-- NUEVA RUTA
                 '/notifications': (_) => const NotificationsScreen(),
               },
             );
           },
         ),
       ),
+    )
     )
     )
     );

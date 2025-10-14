@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
+import '../../state/auth_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
-
 }
-
 
 class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController(text: 'admin@demo.com');
   final _pass = TextEditingController(text: '123456');
-  String _role = 'admin';
 
+  // 'Root' | 'Administrador' | 'Usuario'
+  String _role = 'Administrador';
 
   @override
   Widget build(BuildContext context) {
@@ -29,34 +29,55 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 16),
-                TextField(controller: _email, decoration: const InputDecoration(labelText: 'Correo')),
+                TextField(
+                  controller: _email,
+                  decoration: const InputDecoration(labelText: 'Correo'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: _pass, decoration: const InputDecoration(labelText: 'Contraseña'), obscureText: true),
+                TextField(
+                  controller: _pass,
+                  decoration: const InputDecoration(labelText: 'Contraseña'),
+                  obscureText: true,
+                ),
                 const SizedBox(height: 12),
+
+                // Selector de rol (demo)
                 DropdownButtonFormField<String>(
                   value: _role,
                   items: const [
-                    DropdownMenuItem(value: 'admin', child: Text('Administrador')),
-                    DropdownMenuItem(value: 'user', child: Text('Usuario')),
+                    DropdownMenuItem(value: 'Usuario', child: Text('Usuario')),
+                    DropdownMenuItem(value: 'Administrador', child: Text('Administrador')),
+                    DropdownMenuItem(value: 'Root', child: Text('Root')),
                   ],
-                  onChanged: (v) => setState(() => _role = v ?? 'user'),
-                  decoration: const InputDecoration(labelText: 'Rol'),
+                  onChanged: (v) => setState(() => _role = v ?? 'Usuario'),
+                  decoration: const InputDecoration(
+                    labelText: 'Rol (demo)',
+                    prefixIcon: Icon(Icons.shield_outlined),
+                  ),
                 ),
+
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () {
-                    if (_role == 'admin') {
-                      Navigator.pushReplacementNamed(context, '/admin');
-                    } else {
+                    // Aquí iría tu validación real de credenciales.
+                    // Establece el rol en el AuthController antes de navegar.
+                    final auth = AuthControllerProvider.of(context);
+                    auth.setRole(_role);
+
+                    // Root y Administrador -> shell de admin; Usuario -> shell de user
+                    if (_role == 'Usuario') {
                       Navigator.pushReplacementNamed(context, '/user');
+                    } else {
+                      Navigator.pushReplacementNamed(context, '/admin');
                     }
                   },
                   child: const Text('Entrar'),
                 ),
                 const SizedBox(height: 8),
+
                 Center(
                   child: TextButton.icon(
-                    onPressed: () => _showForgotPassword(context, prefillEmail:  _email?.text),
+                    onPressed: () => _showForgotPassword(context, prefillEmail: _email.text),
                     icon: const Icon(Icons.help_outline),
                     label: const Text('¿Olvidaste tu contraseña?'),
                   ),
@@ -68,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
   Future<void> _showForgotPassword(BuildContext context, {String? prefillEmail}) async {
     final formKey = GlobalKey<FormState>();
     final emailCtrl = TextEditingController(text: prefillEmail ?? '');
@@ -79,7 +101,9 @@ class _LoginScreenState extends State<LoginScreen> {
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
-            left: 16, right: 16, top: 12,
+            left: 16,
+            right: 16,
+            top: 12,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
           ),
           child: Form(
@@ -93,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Escribe tu correo para que el administrador pueda ayudarte a restablecerla.',
+                  'Escribe tu correo para que el administrador (root) pueda ayudarte a restablecerla.',
                   style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface.withOpacity(.7)),
                 ),
                 const SizedBox(height: 12),
@@ -135,7 +159,6 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
   }
-
 }
 
 
