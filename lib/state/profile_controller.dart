@@ -13,6 +13,24 @@ class ProfileController extends ChangeNotifier {
   String get phone => _phone;
   String get about => _about;
 
+  /// Usado desde el login: normaliza y establece el perfil inicial.
+  /// Nota: `roleLabel` llega como 'Root' | 'Administrador' | 'Usuario'
+  void setProfile({
+    required String name,
+    required String email,
+    required String roleLabel,
+    String? phone,
+    String? about,
+  }) {
+    _displayName = name;
+    _email = email;
+    _role = roleLabel;
+    if (phone != null) _phone = phone;
+    if (about != null) _about = about;
+    notifyListeners();
+  }
+
+  /// Actualización parcial desde pantallas de edición de perfil.
   void update({
     String? displayName,
     String? email,
@@ -29,7 +47,7 @@ class ProfileController extends ChangeNotifier {
   }
 }
 
-// Proveedor tipo InheritedNotifier (igual patrón que para tema)
+// Proveedor tipo InheritedNotifier
 class ProfileControllerProvider extends InheritedNotifier<ProfileController> {
   const ProfileControllerProvider({
     super.key,
@@ -38,5 +56,13 @@ class ProfileControllerProvider extends InheritedNotifier<ProfileController> {
   }) : super(notifier: controller, child: child);
 
   static ProfileController of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<ProfileControllerProvider>()!.notifier!;
+      context
+          .dependOnInheritedWidgetOfExactType<ProfileControllerProvider>()!
+          .notifier!;
+
+  /// Versión segura: retorna null si no está envuelto en el árbol.
+  static ProfileController? maybeOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ProfileControllerProvider>()
+          ?.notifier;
 }
