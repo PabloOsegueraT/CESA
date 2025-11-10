@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../state/auth_controller.dart';
+import '../../state/profile_controller.dart';
+import '../../data/services/auth_api.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,11 +11,71 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _email = TextEditingController(text: 'admin@demo.com');
+  final _email = TextEditingController(text: 'pablo@demo.com');
   final _pass = TextEditingController(text: '123456');
+  final _formKey = GlobalKey<FormState>();
+  bool _loading = false;
+  bool _obscure = true;
 
-  // 'Root' | 'Administrador' | 'Usuario'
-  String _role = 'Administrador';
+  @override
+  void dispose() {
+    _email.dispose();
+    _pass.dispose();
+    super.dispose();
+  }
+
+  // Normaliza el rol del servidor ('root'|'admin'|'usuario') a tu app ('Root'|'Administrador'|'Usuario')
+  String _normalizeRole(String serverRole, String email) {
+    final r = serverRole.trim().toLowerCase();
+    if (r == 'root') return 'Root';
+    if (r == 'admin') {
+      // Si decides tratar a cierto admin como Root (opcional):
+      // if (email.toLowerCase() == 'root@demo.com') return 'Root';
+      return 'Administrador';
+    }
+    return 'Usuario';
+  }
+
+  Future<void> _doLogin() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _loading = true);
+    try {
+      final api = AuthApi();
+      final dto = await api.login(_email.text.trim(), _pass.text.trim());
+
+      final role = _normalizeRole(dto.role, dto.email);
+      final auth = AuthControllerProvider.of(context);
+      auth.setRole(role);
+
+      // Si quieres poblar el perfil (opcional):
+      final profile = ProfileControllerProvider.maybeOf(context);
+      profile?.setProfile(
+        name: dto.name.isEmpty ? dto.email : dto.name,
+        email: dto.email,
+        roleLabel: role,
+      );
+
+      // TODO: guardar tokens en almacenamiento seguro si los usas:
+      // dto.accessToken / dto.refreshToken
+
+      if (!mounted) return;
+      if (role == 'Usuario') {
+        Navigator.pushReplacementNamed(context, '/user');
+      } else {
+        Navigator.pushReplacementNamed(context, '/admin');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo iniciar sesión: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,65 +86,65 @@ class _LoginScreenState extends State<LoginScreen> {
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _email,
-                  decoration: const InputDecoration(labelText: 'Correo'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pass,
-                  decoration: const InputDecoration(labelText: 'Contraseña'),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 12),
-
-                // Selector de rol (demo)
-                DropdownButtonFormField<String>(
-                  value: _role,
-                  items: const [
-                    DropdownMenuItem(value: 'Usuario', child: Text('Usuario')),
-                    DropdownMenuItem(value: 'Administrador', child: Text('Administrador')),
-                    DropdownMenuItem(value: 'Root', child: Text('Root')),
-                  ],
-                  onChanged: (v) => setState(() => _role = v ?? 'Usuario'),
-                  decoration: const InputDecoration(
-                    labelText: 'Rol (demo)',
-                    prefixIcon: Icon(Icons.shield_outlined),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _email,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo',
+                      prefixIcon: Icon(Icons.alternate_email),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) {
+                      final txt = (v ?? '').trim();
+                      if (txt.isEmpty) return 'Requerido';
+                      final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(txt);
+                      return ok ? null : 'Correo inválido';
+                    },
                   ),
-                ),
-
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: () {
-                    // Aquí iría tu validación real de credenciales.
-                    // Establece el rol en el AuthController antes de navegar.
-                    final auth = AuthControllerProvider.of(context);
-                    auth.setRole(_role);
-
-                    // Root y Administrador -> shell de admin; Usuario -> shell de user
-                    if (_role == 'Usuario') {
-                      Navigator.pushReplacementNamed(context, '/user');
-                    } else {
-                      Navigator.pushReplacementNamed(context, '/admin');
-                    }
-                  },
-                  child: const Text('Entrar'),
-                ),
-                const SizedBox(height: 8),
-
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () => _showForgotPassword(context, prefillEmail: _email.text),
-                    icon: const Icon(Icons.help_outline),
-                    label: const Text('¿Olvidaste tu contraseña?'),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _pass,
+                    obscureText: _obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                        icon: Icon(_obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                      ),
+                    ),
+                    validator: (v) {
+                      final txt = (v ?? '').trim();
+                      if (txt.isEmpty) return 'Requerida';
+                      if (txt.length < 6) return 'Mínimo 6 caracteres';
+                      return null;
+                    },
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : FilledButton(
+                    onPressed: _doLogin,
+                    child: const Text('Entrar'),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => _showForgotPassword(context, prefillEmail: _email.text),
+                      icon: const Icon(Icons.help_outline),
+                      label: const Text('¿Olvidaste tu contraseña?'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -139,6 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 FilledButton.icon(
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
+                    // Aquí podrías llamar a POST /auth/forgot con emailCtrl.text.trim()
                     Navigator.pop(ctx, true);
                   },
                   icon: const Icon(Icons.send_outlined),
@@ -152,7 +215,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (!mounted) return;
-
     if (result == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Se ha enviado un mensaje al root')),
@@ -160,5 +222,3 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 }
-
-
