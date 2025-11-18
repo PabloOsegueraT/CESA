@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+
 import '../../models/task.dart';
 import '../../design_system/widgets/task_card.dart';
 import '../../models/forum.dart';
 import '../../design_system/widgets/message_bubble.dart';
 import '../admin/screens/task_detail_screen.dart';
 import 'screens/calendar_screen.dart';
-
-
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -17,17 +17,22 @@ class UserShell extends StatefulWidget {
 class _UserShellState extends State<UserShell> {
   int _tab = 0;
 
-  final tasks = List.generate(10, (i) => Task(
-    id: 'u$i',
-    title: 'Mi tarea #$i',
-    description: 'Detalle breve para practicar cambios de estado…',
-    dueDate: DateTime.now().add(Duration(days: i - 1)),
-    priority: i % 3 == 0 ? TaskPriority.high : (i % 3 == 1 ? TaskPriority.medium : TaskPriority.low),
-    status: TaskStatus.pending,
-    assignee: 'Yo',
-    evidenceCount: 0,
-    commentsCount: 0,
-  ));
+  final tasks = List.generate(
+    10,
+        (i) => Task(
+      id: 'u$i',
+      title: 'Mi tarea #$i',
+      description: 'Detalle breve para practicar cambios de estado…',
+      dueDate: DateTime.now().add(Duration(days: i - 1)),
+      priority: i % 3 == 0
+          ? TaskPriority.high
+          : (i % 3 == 1 ? TaskPriority.medium : TaskPriority.low),
+      status: TaskStatus.pending,
+      assignee: 'Yo',
+      evidenceCount: 0,
+      commentsCount: 0,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -47,16 +52,22 @@ class _UserShellState extends State<UserShell> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.check_circle_outlined), label: 'Tareas'),
-          NavigationDestination(icon: Icon(Icons.calendar_today_outlined), label: 'Calendario'),
-          NavigationDestination(icon: Icon(Icons.forum_outlined), label: 'Foros'),
-          NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'Progreso'),
+          NavigationDestination(
+              icon: Icon(Icons.check_circle_outlined), label: 'Tareas'),
+          NavigationDestination(
+              icon: Icon(Icons.calendar_today_outlined), label: 'Calendario'),
+          NavigationDestination(
+              icon: Icon(Icons.forum_outlined), label: 'Foros'),
+          NavigationDestination(
+              icon: Icon(Icons.insights_outlined), label: 'Progreso'),
           NavigationDestination(icon: Icon(Icons.menu), label: 'Más'),
         ],
       ),
       floatingActionButton: _tab == 0
           ? FloatingActionButton.extended(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Subir evidencia (demo)'))),
+        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subir evidencia (demo)')),
+        ),
         icon: const Icon(Icons.upload_file),
         label: const Text('Subir evidencia'),
       )
@@ -64,6 +75,7 @@ class _UserShellState extends State<UserShell> {
     );
   }
 }
+
 class _UserTasksList extends StatefulWidget {
   final List<Task> tasks;
   const _UserTasksList({required this.tasks});
@@ -80,7 +92,9 @@ class _UserTasksListState extends State<_UserTasksList> {
         task: widget.tasks[i],
         onTap: () async {
           final updated = await Navigator.of(context).push<Task>(
-            MaterialPageRoute(builder: (_) => UserTaskDetailScreen(task: widget.tasks[i])),
+            MaterialPageRoute(
+              builder: (_) => UserTaskDetailScreen(task: widget.tasks[i]),
+            ),
           );
           if (updated != null) {
             setState(() => widget.tasks[i] = updated);
@@ -103,17 +117,38 @@ class _UserTasksListState extends State<_UserTasksList> {
             ListTile(
               leading: const Icon(Icons.pause_circle_outline),
               title: const Text('Marcar como Pendiente'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.pending)); Navigator.pop(context); },
+              onTap: () {
+                setState(
+                      () => widget.tasks[i] = t.copyWith(
+                    status: TaskStatus.pending,
+                  ),
+                );
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.play_circle_outline),
               title: const Text('Marcar como En proceso'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.inProgress)); Navigator.pop(context); },
+              onTap: () {
+                setState(
+                      () => widget.tasks[i] = t.copyWith(
+                    status: TaskStatus.inProgress,
+                  ),
+                );
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.check_circle_outline),
               title: const Text('Marcar como Completada'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.done)); Navigator.pop(context); },
+              onTap: () {
+                setState(
+                      () => widget.tasks[i] = t.copyWith(
+                    status: TaskStatus.done,
+                  ),
+                );
+                Navigator.pop(context);
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -126,7 +161,8 @@ class _UserTasksListState extends State<_UserTasksList> {
 class _UserCalendarScreen extends StatelessWidget {
   const _UserCalendarScreen();
   @override
-  Widget build(BuildContext context) => const Center(child: Text('Calendario (demo)'));
+  Widget build(BuildContext context) =>
+      const Center(child: Text('Calendario (demo)'));
 }
 
 class _UserForumsScreen extends StatefulWidget {
@@ -160,7 +196,8 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
       itemBuilder: (_, i) {
         final f = forums[i];
         return ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           tileColor: Theme.of(context).colorScheme.surface,
           leading: const Icon(Icons.forum_outlined),
           title: Text(
@@ -178,11 +215,16 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.chat_bubble_outline, size: 18),
-              Text('${f.messagesCount}', style: const TextStyle(fontSize: 12)),
+              Text(
+                '${f.messagesCount}',
+                style: const TextStyle(fontSize: 12),
+              ),
             ],
           ),
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => _UserForumDetailScreen(forum: f)),
+            MaterialPageRoute(
+              builder: (_) => _UserForumDetailScreen(forum: f),
+            ),
           ),
         );
       },
@@ -219,13 +261,16 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
       isAdmin: true,
     ),
   ];
+
   final _composer = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar:
-      AppBar(title: Text(widget.forum.title, overflow: TextOverflow.ellipsis)),
+      appBar: AppBar(
+        title:
+        Text(widget.forum.title, overflow: TextOverflow.ellipsis),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -244,21 +289,24 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _composer,
-                    decoration:
-                    const InputDecoration(hintText: 'Escribe un mensaje…'),
-                    onSubmitted: (_) => _send(),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _composer,
+                      decoration: const InputDecoration(
+                        hintText: 'Escribe un mensaje…',
+                      ),
+                      onSubmitted: (_) => _send(),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _send,
-                  icon: const Icon(Icons.send_rounded),
-                )
-              ]),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _send,
+                    icon: const Icon(Icons.send_rounded),
+                  )
+                ],
+              ),
             ),
           )
         ],
@@ -285,25 +333,184 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
   }
 }
 
-
 class _UserProgressScreen extends StatelessWidget {
   const _UserProgressScreen();
+
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: const [
-      _ProgressCard(title: 'Semanal', value: '72%'),
-      _ProgressCard(title: 'Mensual', value: '65%'),
-    ],
-  );
+  Widget build(BuildContext context) {
+    // Por ahora valores demo; luego puedes sustituirlos
+    // por datos reales calculados a partir de las tareas.
+    final double weeklyProgress = 0.72; // 72%
+    final double monthlyProgress = 0.65; // 65%
+
+    // Ejemplo de datos para la gráfica (progreso diario en %)
+    final List<double> dailyProgress = [20, 40, 60, 55, 72, 80, 90];
+    final List<String> dayLabels = [
+      'Lun',
+      'Mar',
+      'Mié',
+      'Jue',
+      'Vie',
+      'Sáb',
+      'Dom'
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _ProgressCard(
+          title: 'Semanal',
+          progress: weeklyProgress,
+        ),
+        const SizedBox(height: 16),
+        _ProgressCard(
+          title: 'Mensual',
+          progress: monthlyProgress,
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Mi gráfica de progreso',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _UserProgressChart(
+          points: dailyProgress,
+          labels: dayLabels,
+        ),
+      ],
+    );
+  }
 }
 
 class _ProgressCard extends StatelessWidget {
-  final String title; final String value; const _ProgressCard({required this.title, required this.value});
+  final String title;
+  final double progress; // 0.0–1.0
+
+  const _ProgressCard({
+    required this.title,
+    required this.progress,
+  });
+
   @override
   Widget build(BuildContext context) {
+    final percentage = (progress * 100).toStringAsFixed(0);
+
     return Card(
-      child: SizedBox(height: 120, child: Center(child: Text('$title: $value'))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 4,
+      child: SizedBox(
+        height: 120,
+        child: Center(
+          child: Text(
+            '$title: $percentage%',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gráfica individual de progreso del usuario
+class _UserProgressChart extends StatelessWidget {
+  final List<double> points; // valores 0-100
+  final List<String> labels; // etiquetas eje X
+
+  const _UserProgressChart({
+    required this.points,
+    required this.labels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: 220,
+          child: LineChart(
+            LineChartData(
+              minX: 0,
+              maxX: (points.length - 1).toDouble(),
+              minY: 0,
+              maxY: 100,
+              gridData: FlGridData(
+                show: true,
+                horizontalInterval: 20,
+                verticalInterval: 1,
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 32,
+                    interval: 20,
+                    getTitlesWidget: (value, meta) {
+                      return Text(
+                        '${value.toInt()}%',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      );
+                    },
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      if (index < 0 || index >= labels.length) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          labels[index],
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+              ),
+              borderData: FlBorderData(
+                show: true,
+                border: Border.all(
+                  color: Theme.of(context).dividerColor,
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  isCurved: true,
+                  spots: [
+                    for (int i = 0; i < points.length; i++)
+                      FlSpot(i.toDouble(), points[i]),
+                  ],
+                  barWidth: 3,
+                  color: color,
+                  dotData: FlDotData(show: true),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: color.withOpacity(0.2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -313,27 +520,27 @@ class _UserMoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
-      children: [
-        ListTile(
-          leading: const Icon(Icons.person_outline),
-          title: const Text('Perfil'),
-          onTap: () => Navigator.of(context).pushNamed('/profile'),
-        ),
-        const ListTile(leading: Icon(Icons.notifications_none), title: Text('Notificaciones')),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: const Text('Ajustes'),
-          onTap: () => Navigator.of(context).pushNamed('/settings'),
-        ),
-
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Cerrar sesión'),
-          onTap: () => _confirmLogout(context),
-        ),
-
-      ]
-
+    children: [
+      ListTile(
+        leading: const Icon(Icons.person_outline),
+        title: const Text('Perfil'),
+        onTap: () => Navigator.of(context).pushNamed('/profile'),
+      ),
+      const ListTile(
+        leading: Icon(Icons.notifications_none),
+        title: Text('Notificaciones'),
+      ),
+      ListTile(
+        leading: const Icon(Icons.settings_outlined),
+        title: const Text('Ajustes'),
+        onTap: () => Navigator.of(context).pushNamed('/settings'),
+      ),
+      ListTile(
+        leading: const Icon(Icons.logout),
+        title: const Text('Cerrar sesión'),
+        onTap: () => _confirmLogout(context),
+      ),
+    ],
   );
 }
 
@@ -358,6 +565,8 @@ Future<void> _confirmLogout(BuildContext context) async {
   );
 
   if (ok == true) {
-    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 }
+
