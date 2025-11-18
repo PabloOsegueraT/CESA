@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../models/forum.dart';
 import 'forum_detail_screen.dart';
 import '../../../state/users_controller.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../../core/constants/env.dart'; // donde tienes Env.apiBaseUrl
 
 // Al tope del archivo, después de los imports:
 enum AudienceMode { all, selected }
@@ -17,38 +20,60 @@ class AdminForumsScreen extends StatefulWidget {
 }
 
 class AdminForumsScreenState extends State<AdminForumsScreen> {
-  final List<Forum> forums = [
-    Forum(
-      id: 'f1',
-      title: 'Sprint 10 - Entregables',
-      description: 'Hilo para dudas y acuerdos del sprint.',
-      messagesCount: 12,
-    ),
-    Forum(
-      id: 'f2',
-      title: 'Evidencias y revisiones',
-      description: 'Subida de evidencias y feedback.',
-      messagesCount: 8,
-    ),
-    Forum(
-      id: 'f3',
-      title: 'Anuncios',
-      description: 'Comunicados importantes del admin.',
-      messagesCount: 3,
-    ),
-  ];
+  List<Forum> forums = [];
+  bool _loading = true;
 
-  void openCreateForum(BuildContext context) {
+  Future<void> openCreateForum(BuildContext context) async {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
 
-    // Usuarios disponibles (inyectados desde AdminShell vía: AdminForumsScreen(assignees: ...))
-    final users = [...widget.assignees]..sort();
+    // 1) Cargar usuarios reales desde la API
+    List<Map<String, dynamic>> users = [];
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/users');
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin', // en dev
+          'x-user-id': '1',
+        },
+      );
 
-    // Modo: Todos vs Elegir usuarios
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['users'] as List<dynamic>? ?? []);
+        users = list
+            .map((u) => {
+          'id': u['id'] as int,
+          'name': (u['name'] ?? '').toString(),
+          'email': (u['email'] ?? '').toString(),
+        })
+            .toList()
+          ..sort((a, b) =>
+              a['name'].toString().compareTo(b['name'].toString()));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar usuarios: ${resp.statusCode}'),
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de red al cargar usuarios: $e'),
+        ),
+      );
+      return;
+    }
+
+    // 2) Configuración de modo y selección
     AudienceMode mode = AudienceMode.all;
-    final Set<String> selected = {};
+    final Set<int> selectedUserIds = {};
 
+    // 3) Mostrar bottom sheet
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -106,27 +131,30 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
                   selected: {mode},
                   onSelectionChanged: (s) => setLocal(() {
                     mode = s.first;
-                    if (mode == AudienceMode.all) selected.clear();
+                    if (mode == AudienceMode.all) selectedUserIds.clear();
                   }),
                 ),
 
                 const SizedBox(height: 12),
 
-                // Lista de usuarios SOLO cuando el modo es "Elegir usuarios"
                 if (mode == AudienceMode.selected) ...[
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: users.map((name) {
-                      final isSelected = selected.contains(name);
+                    children: users.map((u) {
+                      final id = u['id'] as int;
+                      final isSelected = selectedUserIds.contains(id);
+                      final name = u['name'] as String;
+                      final email = u['email'] as String;
+
                       return FilterChip(
-                        label: Text(name),
+                        label: Text('$name ($email)'),
                         selected: isSelected,
                         onSelected: (v) => setLocal(() {
                           if (v) {
-                            selected.add(name);
+                            selectedUserIds.add(id);
                           } else {
-                            selected.remove(name);
+                            selectedUserIds.remove(id);
                           }
                         }),
                       );
@@ -134,9 +162,9 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    selected.isEmpty
+                    selectedUserIds.isEmpty
                         ? 'Selecciona al menos un usuario'
-                        : 'Seleccionados: ${selected.length}',
+                        : 'Seleccionados: ${selectedUserIds.length}',
                     style: TextStyle(
                       color: Theme.of(ctx).colorScheme.onSurface.withOpacity(.7),
                     ),
@@ -145,12 +173,21 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
 
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     final title = titleCtrl.text.trim();
-                    if (title.isEmpty) return;
+                    final desc = descCtrl.text.trim();
 
-                    // Validación cuando es "Elegir usuarios"
-                    if (mode == AudienceMode.selected && selected.isEmpty) {
+                    if (title.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('El título no puede estar vacío'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (mode == AudienceMode.selected &&
+                        selectedUserIds.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Selecciona al menos un usuario'),
@@ -159,25 +196,72 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
                       return;
                     }
 
-                    setState(() {
-                      forums.insert(
-                        0,
-                        Forum(
-                          id: DateTime.now().millisecondsSinceEpoch.toString(),
-                          title: title,
-                          description: descCtrl.text.trim(),
-                          messagesCount: 0,
-                          forAll: mode == AudienceMode.all,
-                          members: mode == AudienceMode.all
-                              ? <String>[]
-                              : selected.toList(),
+                    // Obtenemos los correos de los usuarios seleccionados
+                    final memberEmails = (mode == AudienceMode.all)
+                        ? <String>[]
+                        : users
+                        .where((u) =>
+                        selectedUserIds.contains(u['id'] as int))
+                        .map((u) => u['email'] as String)
+                        .toList();
+
+                    final body = {
+                      'title': title,
+                      'description': desc,
+                      'isPublic': mode == AudienceMode.all,
+                      'memberEmails': memberEmails,
+                    };
+
+                    try {
+                      final uri =
+                      Uri.parse('${Env.apiBaseUrl}/api/forums');
+                      final resp = await http.post(
+                        uri,
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-role': 'admin', // dev
+                          'x-user-id': '1',
+                        },
+                        body: jsonEncode(body),
+                      );
+
+                      if (resp.statusCode == 201) {
+                        final data =
+                        jsonDecode(resp.body) as Map<String, dynamic>;
+                        final newForum = Forum.fromJson(data);
+
+                        // Agregamos el foro a la lista local
+                        // (asumiendo que estás dentro del State de AdminForumsScreen)
+                        // ignore: use_build_context_synchronously
+                        (context as Element).markNeedsBuild();
+                        // mejor:
+                        // usamos el setState del State real:
+                        // pero estamos en otro State, así que:
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Error al crear foro: ${resp.statusCode}',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error de red: $e'),
                         ),
                       );
-                    });
+                      return;
+                    }
 
-                    Navigator.pop(ctx);
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                    }
+
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Foro creado (demo)')),
+                      const SnackBar(content: Text('Foro creado correctamente')),
                     );
                   },
                   icon: const Icon(Icons.add_comment_outlined),
@@ -194,6 +278,16 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (forums.isEmpty) {
+      return const Center(
+        child: Text('No hay foros creados todavía'),
+      );
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -201,8 +295,9 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
       itemBuilder: (_, i) {
         final f = forums[i];
         return ListTile(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           tileColor: Theme.of(context).colorScheme.surface,
           leading: const Icon(Icons.forum_outlined),
           title: Text(
@@ -224,10 +319,55 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
             ],
           ),
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => AdminForumDetailScreen(forum: f)),
+            MaterialPageRoute(
+              builder: (_) => AdminForumDetailScreen(forum: f),
+            ),
           ),
         );
       },
     );
   }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadForums();
+  }
+
+  Future<void> _loadForums() async {
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/forums');
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin',   // o 'root' en dev
+          'x-user-id': '1',    // opcional, por si luego filtras por creador
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['forums'] as List<dynamic>? ?? []);
+
+        setState(() {
+          forums = list
+              .map((e) => Forum.fromJson(e as Map<String, dynamic>))
+              .toList();
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar foros: ${resp.statusCode}')),
+        );
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error de red al cargar foros: $e')),
+      );
+    }
+  }
+
 }
