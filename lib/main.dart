@@ -14,9 +14,6 @@ import 'state/notifications_controller.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'state/auth_controller.dart';
 
-
-
-
 void main() {
   runApp(const TaskManagerApp());
 }
