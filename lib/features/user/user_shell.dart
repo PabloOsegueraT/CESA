@@ -1,12 +1,18 @@
+// lib/features/user/user_shell.dart
+
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../core/constants/env.dart';
 import '../../models/task.dart';
 import '../../design_system/widgets/task_card.dart';
 import '../../models/forum.dart';
 import '../../design_system/widgets/message_bubble.dart';
 import '../admin/screens/task_detail_screen.dart';
 import 'screens/calendar_screen.dart';
-
-
+import '../../state/profile_controller.dart';
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -17,27 +23,122 @@ class UserShell extends StatefulWidget {
 class _UserShellState extends State<UserShell> {
   int _tab = 0;
 
-  final tasks = List.generate(10, (i) => Task(
-    id: 'u$i',
-    title: 'Mi tarea #$i',
-    description: 'Detalle breve para practicar cambios de estado…',
-    dueDate: DateTime.now().add(Duration(days: i - 1)),
-    priority: i % 3 == 0 ? TaskPriority.high : (i % 3 == 1 ? TaskPriority.medium : TaskPriority.low),
-    status: TaskStatus.pending,
-    assignee: 'Yo',
-    evidenceCount: 0,
-    commentsCount: 0,
-  ));
+  bool _loading = true;
+  List<Task> _tasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Ejecutar después del primer frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMyTasks(); // ✅ aquí ya puedes usar ScaffoldMessenger.of(context)
+    });
+  }
+
+  Future<void> _loadMyTasks() async {
+    setState(() => _loading = true);
+
+    try {
+      // Obtenemos el perfil para saber el userId
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo determinar el usuario actual'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/tasks/my');
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          // En este módulo el usuario es "Usuario"
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['tasks'] as List<dynamic>? ?? []);
+        final loaded = list
+            .map((e) => Task.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        setState(() {
+          _tasks = loaded;
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al cargar tareas: ${resp.statusCode}'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al cargar tareas: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Cuando una tarea cambia (por ejemplo, su estado) desde el detalle
+  /// o el bottom sheet, actualizamos la lista _tasks del padre.
+  void _onTaskUpdated(Task updated) {
+    setState(() {
+      final idx = _tasks.indexWhere((t) => t.id == updated.id);
+      if (idx != -1) {
+        _tasks[idx] = updated;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final userName = (profile?.displayName ?? '').trim().isEmpty
+        ? 'Yo'
+        : profile!.displayName;
+
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Las tareas que llegan de /api/tasks/my ya son de este usuario,
+    // pero igual filtramos por nombre por seguridad.
+    final myTasks = _tasks.where((t) => t.assignee == userName).toList();
+
     final pages = [
-      _UserTasksList(tasks: tasks),
-      UserCalendarScreen(tasks: tasks, userName: 'Yo'), // ← aquí
+      _UserTasksList(
+        tasks: myTasks,
+        onTaskUpdated: _onTaskUpdated, // 👈 avisar al padre
+      ),
+      UserCalendarScreen(tasks: myTasks, userName: userName),
       const _UserForumsScreen(),
       const _UserProgressScreen(),
       const _UserMoreScreen(),
     ];
+
     final titles = ['Mis tareas', 'Calendario', 'Foros', 'Progreso', 'Más'];
 
     return Scaffold(
@@ -47,16 +148,35 @@ class _UserShellState extends State<UserShell> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.check_circle_outlined), label: 'Tareas'),
-          NavigationDestination(icon: Icon(Icons.calendar_today_outlined), label: 'Calendario'),
-          NavigationDestination(icon: Icon(Icons.forum_outlined), label: 'Foros'),
-          NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'Progreso'),
-          NavigationDestination(icon: Icon(Icons.menu), label: 'Más'),
+          NavigationDestination(
+            icon: Icon(Icons.check_circle_outlined),
+            label: 'Tareas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_today_outlined),
+            label: 'Calendario',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.forum_outlined),
+            label: 'Foros',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            label: 'Progreso',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu),
+            label: 'Más',
+          ),
         ],
       ),
       floatingActionButton: _tab == 0
           ? FloatingActionButton.extended(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Subir evidencia (demo)'))),
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Subir evidencia (demo)')),
+          );
+        },
         icon: const Icon(Icons.upload_file),
         label: const Text('Subir evidencia'),
       )
@@ -64,9 +184,16 @@ class _UserShellState extends State<UserShell> {
     );
   }
 }
+
 class _UserTasksList extends StatefulWidget {
   final List<Task> tasks;
-  const _UserTasksList({required this.tasks});
+  final void Function(Task) onTaskUpdated; // 👈 callback al padre
+
+  const _UserTasksList({
+    required this.tasks,
+    required this.onTaskUpdated,
+  });
+
   @override
   State<_UserTasksList> createState() => _UserTasksListState();
 }
@@ -74,16 +201,28 @@ class _UserTasksList extends StatefulWidget {
 class _UserTasksListState extends State<_UserTasksList> {
   @override
   Widget build(BuildContext context) {
+    if (widget.tasks.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No tienes tareas asignadas'),
+        ),
+      );
+    }
+
     return ListView.builder(
       itemCount: widget.tasks.length,
       itemBuilder: (_, i) => TaskCard(
         task: widget.tasks[i],
         onTap: () async {
           final updated = await Navigator.of(context).push<Task>(
-            MaterialPageRoute(builder: (_) => UserTaskDetailScreen(task: widget.tasks[i])),
+            MaterialPageRoute(
+              builder: (_) => UserTaskDetailScreen(task: widget.tasks[i]),
+            ),
           );
           if (updated != null) {
-            setState(() => widget.tasks[i] = updated);
+            // ✅ Actualizamos en el padre, que es el dueño de _tasks
+            widget.onTaskUpdated(updated);
           }
         },
         onMore: () => _changeStatus(context, i),
@@ -103,17 +242,30 @@ class _UserTasksListState extends State<_UserTasksList> {
             ListTile(
               leading: const Icon(Icons.pause_circle_outline),
               title: const Text('Marcar como Pendiente'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.pending)); Navigator.pop(context); },
+              onTap: () {
+                final updated = t.copyWith(status: TaskStatus.pending);
+                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.play_circle_outline),
               title: const Text('Marcar como En proceso'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.inProgress)); Navigator.pop(context); },
+              onTap: () {
+                final updated =
+                t.copyWith(status: TaskStatus.inProgress);
+                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.check_circle_outline),
               title: const Text('Marcar como Completada'),
-              onTap: () { setState(() => widget.tasks[i] = t.copyWith(status: TaskStatus.done)); Navigator.pop(context); },
+              onTap: () {
+                final updated = t.copyWith(status: TaskStatus.done);
+                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                Navigator.pop(context);
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -123,11 +275,7 @@ class _UserTasksListState extends State<_UserTasksList> {
   }
 }
 
-class _UserCalendarScreen extends StatelessWidget {
-  const _UserCalendarScreen();
-  @override
-  Widget build(BuildContext context) => const Center(child: Text('Calendario (demo)'));
-}
+// ===== Foros, progreso y más (igual que los tenías) =====
 
 class _UserForumsScreen extends StatefulWidget {
   const _UserForumsScreen();
@@ -160,7 +308,8 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
       itemBuilder: (_, i) {
         final f = forums[i];
         return ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           tileColor: Theme.of(context).colorScheme.surface,
           leading: const Icon(Icons.forum_outlined),
           title: Text(
@@ -178,7 +327,8 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.chat_bubble_outline, size: 18),
-              Text('${f.messagesCount}', style: const TextStyle(fontSize: 12)),
+              Text('${f.messagesCount}',
+                  style: const TextStyle(fontSize: 12)),
             ],
           ),
           onTap: () => Navigator.of(context).push(
@@ -224,8 +374,9 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar:
-      AppBar(title: Text(widget.forum.title, overflow: TextOverflow.ellipsis)),
+      appBar: AppBar(
+          title: Text(widget.forum.title,
+              overflow: TextOverflow.ellipsis)),
       body: Column(
         children: [
           Expanded(
@@ -248,8 +399,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
                 Expanded(
                   child: TextField(
                     controller: _composer,
-                    decoration:
-                    const InputDecoration(hintText: 'Escribe un mensaje…'),
+                    decoration: const InputDecoration(
+                        hintText: 'Escribe un mensaje…'),
                     onSubmitted: (_) => _send(),
                   ),
                 ),
@@ -285,7 +436,6 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
   }
 }
 
-
 class _UserProgressScreen extends StatelessWidget {
   const _UserProgressScreen();
   @override
@@ -299,11 +449,14 @@ class _UserProgressScreen extends StatelessWidget {
 }
 
 class _ProgressCard extends StatelessWidget {
-  final String title; final String value; const _ProgressCard({required this.title, required this.value});
+  final String title;
+  final String value;
+  const _ProgressCard({required this.title, required this.value});
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: SizedBox(height: 120, child: Center(child: Text('$title: $value'))),
+      child:
+      SizedBox(height: 120, child: Center(child: Text('$title: $value'))),
     );
   }
 }
@@ -313,27 +466,27 @@ class _UserMoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
-      children: [
-        ListTile(
-          leading: const Icon(Icons.person_outline),
-          title: const Text('Perfil'),
-          onTap: () => Navigator.of(context).pushNamed('/profile'),
-        ),
-        const ListTile(leading: Icon(Icons.notifications_none), title: Text('Notificaciones')),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: const Text('Ajustes'),
-          onTap: () => Navigator.of(context).pushNamed('/settings'),
-        ),
-
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Cerrar sesión'),
-          onTap: () => _confirmLogout(context),
-        ),
-
-      ]
-
+    children: [
+      ListTile(
+        leading: const Icon(Icons.person_outline),
+        title: const Text('Perfil'),
+        onTap: () => Navigator.of(context).pushNamed('/profile'),
+      ),
+      const ListTile(
+        leading: Icon(Icons.notifications_none),
+        title: Text('Notificaciones'),
+      ),
+      ListTile(
+        leading: const Icon(Icons.settings_outlined),
+        title: const Text('Ajustes'),
+        onTap: () => Navigator.of(context).pushNamed('/settings'),
+      ),
+      ListTile(
+        leading: const Icon(Icons.logout),
+        title: const Text('Cerrar sesión'),
+        onTap: () => _confirmLogout(context),
+      ),
+    ],
   );
 }
 
@@ -358,6 +511,7 @@ Future<void> _confirmLogout(BuildContext context) async {
   );
 
   if (ok == true) {
-    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 }
