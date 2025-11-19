@@ -5,6 +5,7 @@ import '../../../state/users_controller.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/env.dart'; // donde tienes Env.apiBaseUrl
+import '../../../state/profile_controller.dart'; // 👈 NUEVO
 
 // Al tope del archivo, después de los imports:
 enum AudienceMode { all, selected }
@@ -278,6 +279,8 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final int currentUserId = profile?.userId ?? 0;
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -320,7 +323,10 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
           ),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => AdminForumDetailScreen(forum: f),
+              builder: (_) => AdminForumDetailScreen(
+                forum: f,
+                currentUserId: currentUserId, // 👈 AQUÍ VA
+              ),
             ),
           ),
         );
