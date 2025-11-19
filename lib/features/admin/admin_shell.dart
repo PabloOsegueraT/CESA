@@ -1,5 +1,6 @@
 // lib/features/admin/admin_shell.dart
 import 'dart:convert';
+import 'screens/users_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -30,31 +31,86 @@ class _AdminShellState extends State<AdminShell> {
   final GlobalKey<AdminForumsScreenState> _forumsKey =
   GlobalKey<AdminForumsScreenState>();
 
-  // Lista que usa el calendario (demo + nuevas tareas que crees)
-  final List<Task> tasks = List.generate(
-    8,
-        (i) => Task(
-      id: 't$i',
-      title: 'Tarea crítica #$i',
-      description: 'Descripción corta de la tarea número $i con detalles…',
-      dueDate: DateTime.now().add(Duration(days: i - 2)),
-      priority: i % 3 == 0
-          ? TaskPriority.high
-          : (i % 3 == 1 ? TaskPriority.medium : TaskPriority.low),
-      status: i % 3 == 0
-          ? TaskStatus.pending
-          : (i % 3 == 1 ? TaskStatus.inProgress : TaskStatus.done),
-      assignee: i % 2 == 0 ? 'Pablo' : 'Marco',
-      evidenceCount: i,
-      commentsCount: 2 * i,
-    ),
-  );
+  // 🔥 AHORA: estado real para tareas del calendario
+  bool _loading = true;
+  final List<Task> _tasks = [];
 
   // Solo se usa para el módulo de foros
   final List<String> assignees = ['Pablo', 'Marco', 'Andoni', 'Joaquín', 'Admin'];
 
+  // 🔥 NUEVO: cargar TODAS las tareas desde el backend
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllTasks();
+    });
+  }
+
+  Future<void> _loadAllTasks() async {
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/tasks');
+      final resp = await http.get(
+        uri,
+        headers: const {
+          'Content-Type': 'application/json',
+          'x-role': 'admin', // o 'root' si quieres
+          'x-user-id': '1',
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+
+        // 👇 Ajusta esto si tu API regresa otro formato
+        // Caso 1: { "tasks": [ ... ] }
+        List<dynamic> rawList;
+        if (data is Map<String, dynamic>) {
+          rawList = (data['tasks'] as List<dynamic>? ?? []);
+        } else if (data is List<dynamic>) {
+          // Caso 2: [ ... ] directo
+          rawList = data;
+        } else {
+          rawList = [];
+        }
+
+        final loaded = rawList
+            .map((e) => Task.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        if (!mounted) return;
+        setState(() {
+          _tasks
+            ..clear()
+            ..addAll(loaded);
+          _loading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar tareas: ${resp.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de red al cargar tareas: $e'),
+        ),
+      );
+    }
+  }
+
   /// Abre el formulario de nueva tarea,
-  /// manda la tarea al backend y la agrega a `tasks` (para el calendario).
+  /// manda la tarea al backend y la agrega a `_tasks` (para el calendario).
   Future<void> _openCreateTask() async {
     // 1) Cargar usuarios reales desde la API
     List<Map<String, dynamic>> users = [];
@@ -185,9 +241,9 @@ class _AdminShellState extends State<AdminShell> {
 
         if (!mounted) return;
 
-        // Lo agregamos a la lista de tareas que usa el calendario
+        // 🔥 Lo agregamos a la lista que usa el calendario
         setState(() {
-          tasks.insert(0, created);
+          _tasks.insert(0, created);
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -222,7 +278,8 @@ class _AdminShellState extends State<AdminShell> {
       AdminTasksScreen(
         adminName: adminName, // 👈 aquí se usa el nombre logueado
       ),
-      AdminCalendarScreen(tasks: tasks),
+      // 🔥 Calendario ahora recibe _tasks (de la BD)
+      AdminCalendarScreen(tasks: _tasks),
       AdminForumsScreen(
         key: _forumsKey,
         assignees: assignees,
@@ -240,7 +297,9 @@ class _AdminShellState extends State<AdminShell> {
 
     return Scaffold(
       appBar: AppBar(title: Text(titles[_tab])),
-      body: pages[_tab],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : pages[_tab],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
@@ -380,9 +439,16 @@ class _AdminMoreScreen extends StatelessWidget {
                   ? 'Ver, crear, eliminar, cambiar contraseñas'
                   : 'Ver',
             ),
-            onTap: () => Navigator.of(context).pushNamed('/admin-users'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminUsersScreen(),
+                ),
+              );
+            },
           ),
         ],
+
 
         const Divider(),
         // Cerrar sesión

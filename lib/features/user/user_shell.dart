@@ -1,7 +1,7 @@
 // lib/features/user/user_shell.dart
 
 import 'dart:convert';
-
+import 'screens/calendar_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -134,13 +134,14 @@ class _UserShellState extends State<UserShell> {
     final pages = [
       _UserTasksList(
         tasks: myTasks,
-        onTaskUpdated: _onTaskUpdated, // 👈 avisar al padre
+        onTaskUpdated: _onTaskUpdated,
       ),
-      UserCalendarScreen(tasks: myTasks, userName: userName),
+      UserCalendarScreen(tasks: myTasks), // 👈 sin userName
       const _UserForumsScreen(),
       const _UserProgressScreen(),
       const _UserMoreScreen(),
     ];
+
 
     final titles = ['Mis tareas', 'Calendario', 'Foros', 'Progreso', 'Más'];
 
@@ -278,12 +279,7 @@ class _UserTasksListState extends State<_UserTasksList> {
   }
 }
 
-class _UserCalendarScreen extends StatelessWidget {
-  const _UserCalendarScreen();
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Calendario (demo)'));
-}
+
 
 class _UserForumsScreen extends StatefulWidget {
   const _UserForumsScreen();
@@ -629,7 +625,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(children: [
+              child: Row(
+              children: [
                 Expanded(
                   child: TextField(
                     controller: _composer,
@@ -637,6 +634,7 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
                         hintText: 'Escribe un mensaje…'),
                     onSubmitted: (_) => _send(),
                   ),
+                ),
                   const SizedBox(width: 8),
                   IconButton(
                     onPressed: _send,

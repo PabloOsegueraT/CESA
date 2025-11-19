@@ -8,7 +8,7 @@ import 'state/theme_controller.dart';
 import 'features/settings/profile_screen.dart';
 import 'state/profile_controller.dart';
 import 'state/users_controller.dart';
-import 'features/admin/screens/create_user_screen.dart';
+import 'features/admin/screens/users_create_screen.dart';
 import 'features/admin/screens/users_screen.dart';
 import 'state/notifications_controller.dart';
 import 'features/notifications/notifications_screen.dart';
@@ -60,7 +60,7 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
                 '/user': (_) => const UserShell(),
                 '/settings': (_) => const SettingsScreen(),
                 '/profile': (_) => const ProfileScreen(),
-                '/create-user': (_) => const CreateUserScreen(),
+                '/create-user': (_) => const AdminUserCreateScreen(),
                 '/admin-users': (_) => const AdminUsersScreen(),
                 '/notifications': (_) => const NotificationsScreen(),
               },
