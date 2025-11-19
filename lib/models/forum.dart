@@ -107,6 +107,7 @@ class ForumMessage {
   final String text;
   final DateTime timestamp;
   final bool isAdmin;
+  final bool isMine;
 
   ForumMessage({
     required this.id,
@@ -114,9 +115,13 @@ class ForumMessage {
     required this.text,
     required this.timestamp,
     this.isAdmin = false,
+    this.isMine = false,
   });
 
-  factory ForumMessage.fromJson(Map<String, dynamic> json) {
+  factory ForumMessage.fromJson(
+      Map<String, dynamic> json, {
+        int? currentUserId, // 👈 NUEVO
+      }) {
     final rawId = json['id'];
     final idStr = rawId?.toString() ?? '';
 
@@ -136,12 +141,25 @@ class ForumMessage {
       _ => false,
     };
 
+    // 👇 leemos el authorId que manda el backend
+    int? authorId;
+    final rawAuthorId = json['authorId'];
+    if (rawAuthorId is int) {
+      authorId = rawAuthorId;
+    } else if (rawAuthorId is String) {
+      authorId = int.tryParse(rawAuthorId);
+    }
+
+    final boolMine =
+        currentUserId != null && authorId != null && authorId == currentUserId;
+
     return ForumMessage(
       id: idStr,
       author: json['author']?.toString() ?? '',
       text: json['text']?.toString() ?? '',
       timestamp: ts,
       isAdmin: boolAdmin,
+      isMine: boolMine,
     );
   }
 }
