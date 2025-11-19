@@ -292,59 +292,134 @@ class _UserForumsScreen extends StatefulWidget {
 }
 
 class _UserForumsScreenState extends State<_UserForumsScreen> {
-  final List<Forum> forums = [
-    Forum(
-      id: 'f1',
-      title: 'Ayuda con tarea #2',
-      description: 'Preguntas y respuestas entre usuarios y admin.',
-      messagesCount: 5,
-    ),
-    Forum(
-      id: 'f2',
-      title: 'Dudas generales',
-      description: 'Espacio para dudas varias.',
-      messagesCount: 11,
-    ),
-  ];
+  bool _loading = true;
+  List<Forum> _forums = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Esperamos al primer frame para tener un context estable
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMyForums();
+    });
+  }
+
+  Future<void> _loadMyForums() async {
+    setState(() => _loading = true);
+
+    try {
+      // Necesitamos el userId para mandarlo en x-user-id
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo determinar el usuario actual')),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/forums/my');
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['forums'] as List<dynamic>? ?? []);
+
+        final loaded = list
+            .map((e) => Forum.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        setState(() {
+          _forums = loaded;
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al cargar foros: ${resp.statusCode}')),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error de red al cargar foros: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: forums.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final f = forums[i];
-        return ListTile(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          tileColor: Theme.of(context).colorScheme.surface,
-          leading: const Icon(Icons.forum_outlined),
-          title: Text(
-            f.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            f.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.chat_bubble_outline, size: 18),
-              Text('${f.messagesCount}', style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => _UserForumDetailScreen(forum: f),
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_forums.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No estás agregado a ningún foro todavía'),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadMyForums,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _forums.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (_, i) {
+          final f = _forums[i];
+          return ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-          ),
-        );
-      },
+            tileColor: Theme.of(context).colorScheme.surface,
+            leading: const Icon(Icons.forum_outlined),
+            title: Text(
+              f.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              f.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.chat_bubble_outline, size: 18),
+                Text(
+                  '${f.messagesCount}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _UserForumDetailScreen(forum: f),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -352,51 +427,200 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
 class _UserForumDetailScreen extends StatefulWidget {
   final Forum forum;
   const _UserForumDetailScreen({required this.forum});
+
   @override
   State<_UserForumDetailScreen> createState() => _UserForumDetailScreenState();
 }
 
 class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
-  final List<ForumMessage> messages = [
-    ForumMessage(
-      id: 'm1',
-      author: 'Marco',
-      text: '¿Cómo subo la evidencia?',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 40)),
-    ),
-    ForumMessage(
-      id: 'm2',
-      author: 'Pablo',
-      text: 'Desde la tarjeta de la tarea, botón subir.',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 38)),
-    ),
-    ForumMessage(
-      id: 'm3',
-      author: 'Admin',
-      text: 'Correcto, revisen fechas límite 👀',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-      isAdmin: true,
-    ),
-  ];
-
+  bool _loading = true;
   final _composer = TextEditingController();
+  List<ForumMessage> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Cargamos los mensajes después del primer frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMessages();
+    });
+  }
+
+  @override
+  void dispose() {
+    _composer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMessages() async {
+    setState(() => _loading = true);
+
+    try {
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo determinar el usuario actual'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse(
+        '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts',
+      );
+
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['posts'] as List<dynamic>? ?? []);
+
+        final loaded = list
+            .map((e) => ForumMessage.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        setState(() {
+          _messages = loaded;
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error al cargar mensajes: ${resp.statusCode}',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al cargar mensajes: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _composer.text.trim();
+    if (text.isEmpty) return;
+
+    try {
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo determinar el usuario actual'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse(
+        '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts',
+      );
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+        body: jsonEncode({'text': text}),
+      );
+
+      if (resp.statusCode == 201) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final msg = ForumMessage.fromJson(data);
+
+        setState(() {
+          _messages.add(msg);
+          widget.forum.messagesCount = _messages.length;
+          widget.forum.lastUpdated = msg.timestamp;
+        });
+        _composer.clear();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error al enviar mensaje: ${resp.statusCode}',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al enviar mensaje: $e'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final myName = (profile?.displayName ?? '').trim();
+
     return Scaffold(
       appBar: AppBar(
-          title: Text(widget.forum.title,
-              overflow: TextOverflow.ellipsis)),
+        title: Text(
+          widget.forum.title,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _messages.isEmpty
+                ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('Aún no hay mensajes en este foro'),
+              ),
+            )
+                : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: messages.length,
+              itemCount: _messages.length,
               itemBuilder: (_, i) {
-                final msg = messages[i];
-                final isMine = msg.author == 'Yo'; // demo
-                return MessageBubble(message: msg, isMine: isMine);
+                final msg = _messages[i];
+                final isMine = myName.isNotEmpty &&
+                    msg.author == myName; // burbuja "mía"
+
+                return MessageBubble(
+                  message: msg,
+                  isMine: isMine,
+                );
               },
             ),
           ),
@@ -413,36 +637,18 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
                         hintText: 'Escribe un mensaje…'),
                     onSubmitted: (_) => _send(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _send,
-                  icon: const Icon(Icons.send_rounded),
-                )
-              ]),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _send,
+                    icon: const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
             ),
-          )
+          ),
         ],
       ),
     );
-  }
-
-  void _send() {
-    final text = _composer.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      messages.add(
-        ForumMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          author: 'Yo',
-          text: text,
-          timestamp: DateTime.now(),
-        ),
-      );
-      widget.forum.messagesCount = messages.length;
-      widget.forum.lastUpdated = DateTime.now();
-    });
-    _composer.clear();
   }
 }
 
