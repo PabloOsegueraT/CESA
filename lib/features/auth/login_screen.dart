@@ -52,10 +52,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Si quieres poblar el perfil (opcional):
       final profile = ProfileControllerProvider.maybeOf(context);
+
+      // Convertimos dto.id (String) a int?
+      final int? userIdInt = int.tryParse(dto.id.toString());
+
       profile?.setProfile(
         name: dto.name.isEmpty ? dto.email : dto.name,
         email: dto.email,
         roleLabel: role,
+        userId: userIdInt,   // ✅ ahora es int?
       );
 
       // TODO: guardar tokens en almacenamiento seguro si los usas:
