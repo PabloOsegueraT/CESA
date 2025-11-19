@@ -1,5 +1,6 @@
 // lib/features/admin/admin_shell.dart
 import 'dart:convert';
+import 'screens/users_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -438,9 +439,16 @@ class _AdminMoreScreen extends StatelessWidget {
                   ? 'Ver, crear, eliminar, cambiar contraseñas'
                   : 'Ver',
             ),
-            onTap: () => Navigator.of(context).pushNamed('/admin-users'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminUsersScreen(),
+                ),
+              );
+            },
           ),
         ],
+
 
         const Divider(),
         // Cerrar sesión
