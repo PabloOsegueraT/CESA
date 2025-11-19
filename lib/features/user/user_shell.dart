@@ -629,16 +629,13 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _composer,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribe un mensaje…',
-                      ),
-                      onSubmitted: (_) => _send(),
-                    ),
+              child: Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _composer,
+                    decoration: const InputDecoration(
+                        hintText: 'Escribe un mensaje…'),
+                    onSubmitted: (_) => _send(),
                   ),
                   const SizedBox(width: 8),
                   IconButton(
