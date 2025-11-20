@@ -27,9 +27,10 @@ class _AdminUserCreateScreenState extends State<AdminUserCreateScreen> {
 
   Future<Map<String, String>> _buildHeaders() async {
     final auth = AuthControllerProvider.of(context);
+    final roleCode = auth.isRoot ? 'root' : 'admin';
     return {
       'Content-Type': 'application/json',
-      'x-role': auth.role, // debe ser 'root' cuando estés logueado como root
+      'x-role': roleCode, // debe ser 'root' cuando estés logueado como root
       'x-user-id': '1',    // ID fijo por ahora
     };
   }

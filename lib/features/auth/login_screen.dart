@@ -56,12 +56,15 @@ class _LoginScreenState extends State<LoginScreen> {
       // Convertimos dto.id (String) a int?
       final int? userIdInt = int.tryParse(dto.id.toString());
 
-      profile?.setProfile(
-        name: dto.name.isEmpty ? dto.email : dto.name,
-        email: dto.email,
-        roleLabel: role,
-        userId: userIdInt,   // ✅ ahora es int?
-      );
+      profile?.setFromBackend({
+        'id': userIdInt,                           // entero
+        'name': dto.name.isEmpty ? dto.email : dto.name,
+        'email': dto.email,
+        'role': role.toLowerCase(),               // 'root' | 'admin' | 'usuario'
+        'phone': null,                            // si aún no los tienes
+        'about': null,
+        'avatar_url': null,
+      });
 
       // TODO: guardar tokens en almacenamiento seguro si los usas:
       // dto.accessToken / dto.refreshToken
