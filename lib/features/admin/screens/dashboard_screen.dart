@@ -68,7 +68,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _error = false;
   String? _errorMessage;
 
-  // Mes seleccionado
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   static const _monthNames = [
@@ -102,10 +101,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<Map<String, String>> _buildHeaders() async {
     final auth = AuthControllerProvider.of(context);
+
+    // 👇 Forzamos el código correcto para el backend
+    final roleCode = auth.isRoot ? 'root' : 'admin';
+
     return {
       'Content-Type': 'application/json',
-      'x-role': auth.role,
-      // para este endpoint no necesitamos x-user-id
+      'x-role': roleCode,
     };
   }
 
@@ -171,7 +173,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onRefresh: _loadSummary,
           child: CustomScrollView(
             slivers: [
-              // Header: ya NO dice "Dashboard", solo resumen y selector de mes
               SliverToBoxAdapter(
                 child: Padding(
                   padding:
@@ -208,8 +209,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
               ),
-
-              // Contenido principal
               SliverToBoxAdapter(
                 child: Padding(
                   padding:
@@ -269,7 +268,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Tarjetas superiores
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -301,8 +299,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
         const SizedBox(height: 16),
-
-        // Banner 48h
         if (s.dueSoon48h > 0)
           Card(
             color: Colors.amber.withOpacity(0.12),
@@ -329,8 +325,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
         if (s.dueSoon48h > 0) const SizedBox(height: 16),
-
-        // Gráfica por estado
         Card(
           shape:
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -343,8 +337,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Gráfica por prioridad
         Card(
           shape:
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -361,8 +353,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ------------ Gráficas ------------
-
   Widget _buildStatusChart(DashboardSummary s) {
     final total = s.pending + s.inProgress + s.done;
     if (total == 0) {
@@ -378,7 +368,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.pending}',
           radius: 70,
           color: Colors.orangeAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       if (s.inProgress > 0)
         PieChartSectionData(
@@ -386,7 +377,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.inProgress}',
           radius: 70,
           color: Colors.lightBlueAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       if (s.done > 0)
         PieChartSectionData(
@@ -394,7 +386,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.done}',
           radius: 70,
           color: Colors.greenAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
     ];
 
@@ -449,7 +442,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.low}',
           radius: 70,
           color: Colors.tealAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       if (s.medium > 0)
         PieChartSectionData(
@@ -457,7 +451,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.medium}',
           radius: 70,
           color: Colors.deepPurpleAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       if (s.high > 0)
         PieChartSectionData(
@@ -465,7 +460,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: '${s.high}',
           radius: 70,
           color: Colors.redAccent,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle:
+          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
     ];
 
@@ -505,8 +501,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 }
-
-// ------------ Widgets reutilizables ------------
 
 class _MetricCard extends StatelessWidget {
   final String title;

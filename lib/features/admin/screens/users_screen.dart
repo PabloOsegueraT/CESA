@@ -60,16 +60,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
   Future<Map<String, String>> _buildHeaders() async {
     final auth = AuthControllerProvider.of(context);
-    final role = auth.role; // 'root' | 'admin' | 'usuario'
+
+    // 👇 Traducimos el rol de la app al código del backend
+    final roleCode = auth.isRoot ? 'root' : 'admin';
 
     return {
       'Content-Type': 'application/json',
-      'x-role': role,
-      // Por ahora usamos un ID fijo porque el backend de usuarios
-      // no usa x-user-id para nada crítico
-      'x-user-id': '1',
+      'x-role': roleCode,
+      // NO hace falta x-user-id para listar usuarios
     };
   }
+
 
   Future<void> _loadUsers({String query = ''}) async {
     setState(() => _loading = true);
