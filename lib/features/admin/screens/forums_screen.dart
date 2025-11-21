@@ -274,6 +274,8 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
         },
       ),
     );
+
+
   }
 
 
@@ -281,6 +283,9 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
   Widget build(BuildContext context) {
     final profile = ProfileControllerProvider.maybeOf(context);
     final int currentUserId = profile?.userId ?? 0;
+    final String role = (profile?.roleLabel ?? '').toLowerCase();
+    final bool isRoot = role == 'root';
+
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -314,18 +319,34 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.chat_bubble_outline, size: 18),
-              Text('${f.messagesCount}', style: const TextStyle(fontSize: 12)),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.chat_bubble_outline, size: 18),
+                  Text(
+                    '${f.messagesCount}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+              if (isRoot) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  tooltip: 'Eliminar foro',
+                  onPressed: () => _confirmDeleteForum(f, i),
+                ),
+              ],
             ],
           ),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => AdminForumDetailScreen(
                 forum: f,
-                currentUserId: currentUserId, // 👈 AQUÍ VA
+                currentUserId: currentUserId,
               ),
             ),
           ),
@@ -333,7 +354,6 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
       },
     );
   }
-
   @override
   void initState() {
     super.initState();
@@ -376,4 +396,85 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
     }
   }
 
+  Future<void> _confirmDeleteForum(Forum forum, int index) async {
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final role = (profile?.roleLabel ?? '').toLowerCase(); // 👈 ajusta si tu getter se llama distinto
+    final userId = profile?.userId?.toString() ?? '1';
+
+    if (role != 'root') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Solo el usuario root puede eliminar foros')),
+      );
+      return;
+    }
+
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar foro'),
+        content: Text(
+          '¿Seguro que quieres eliminar el foro "${forum.title}"?\n\n'
+              'Se eliminarán también todos los mensajes y archivos relacionados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    await _deleteForumFromApi(forum, index, userId);
+  }
+
+  Future<void> _deleteForumFromApi(Forum forum, int index, String userId) async {
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/forums/${forum.id}');
+      final resp = await http.delete(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'root',      // 👈 IMPORTANTE: root
+          'x-user-id': userId,   // por si quieres saber quién lo borró
+        },
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        setState(() {
+          forums.removeAt(index);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Foro eliminado correctamente')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error al eliminar foro: ${resp.statusCode}',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al eliminar foro: $e'),
+          ),
+        );
+      }
+    }
+  }
 }
