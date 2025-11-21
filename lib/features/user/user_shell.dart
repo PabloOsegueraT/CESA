@@ -1,21 +1,24 @@
 // lib/features/user/user_shell.dart
 
 import 'dart:convert';
-import 'screens/calendar_screen.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../core/constants/env.dart';
-import 'package:fl_chart/fl_chart.dart';
-
 import '../../models/task.dart';
-import '../../design_system/widgets/task_card.dart';
 import '../../models/forum.dart';
-import '../../design_system/widgets/message_bubble.dart';
+import '../../design_system/widgets/task_card.dart';
 import '../admin/screens/task_detail_screen.dart';
+import '../admin/screens/fullscreen_image_screen.dart';
 import 'screens/calendar_screen.dart';
 import '../../state/profile_controller.dart';
-
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -73,9 +76,8 @@ class _UserShellState extends State<UserShell> {
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final list = (data['tasks'] as List<dynamic>? ?? []);
-        final loaded = list
-            .map((e) => Task.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final loaded =
+        list.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList();
 
         setState(() {
           _tasks = loaded;
@@ -136,12 +138,11 @@ class _UserShellState extends State<UserShell> {
         tasks: myTasks,
         onTaskUpdated: _onTaskUpdated,
       ),
-      UserCalendarScreen(tasks: myTasks), // 👈 sin userName
+      UserCalendarScreen(tasks: myTasks),
       const _UserForumsScreen(),
       const _UserProgressScreen(),
       const _UserMoreScreen(),
     ];
-
 
     final titles = ['Mis tareas', 'Calendario', 'Foros', 'Progreso', 'Más'];
 
@@ -256,8 +257,7 @@ class _UserTasksListState extends State<_UserTasksList> {
               leading: const Icon(Icons.play_circle_outline),
               title: const Text('Marcar como En proceso'),
               onTap: () {
-                final updated =
-                t.copyWith(status: TaskStatus.inProgress);
+                final updated = t.copyWith(status: TaskStatus.inProgress);
                 widget.onTaskUpdated(updated); // 👈 actualiza en el padre
                 Navigator.pop(context);
               },
@@ -279,7 +279,9 @@ class _UserTasksListState extends State<_UserTasksList> {
   }
 }
 
-
+/* ============================
+ *  FOROS – USUARIO
+ * ========================== */
 
 class _UserForumsScreen extends StatefulWidget {
   const _UserForumsScreen();
@@ -312,7 +314,8 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
         setState(() => _loading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No se pudo determinar el usuario actual')),
+            const SnackBar(
+                content: Text('No se pudo determinar el usuario actual')),
           );
         }
         return;
@@ -332,9 +335,8 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final list = (data['forums'] as List<dynamic>? ?? []);
 
-        final loaded = list
-            .map((e) => Forum.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final loaded =
+        list.map((e) => Forum.fromJson(e as Map<String, dynamic>)).toList();
 
         setState(() {
           _forums = loaded;
@@ -430,8 +432,10 @@ class _UserForumDetailScreen extends StatefulWidget {
 
 class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
   bool _loading = true;
+  bool _sending = false;
   final _composer = TextEditingController();
   List<ForumMessage> _messages = [];
+  int? _currentUserId;
 
   @override
   void initState() {
@@ -466,6 +470,7 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         }
         return;
       }
+      _currentUserId = userId;
 
       final uri = Uri.parse(
         '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts',
@@ -485,7 +490,12 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         final list = (data['posts'] as List<dynamic>? ?? []);
 
         final loaded = list
-            .map((e) => ForumMessage.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => ForumMessage.fromJson(
+            e as Map<String, dynamic>,
+            currentUserId: userId,
+          ),
+        )
             .toList();
 
         setState(() {
@@ -497,9 +507,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Error al cargar mensajes: ${resp.statusCode}',
-              ),
+              content:
+              Text('Error al cargar mensajes: ${resp.statusCode}'),
             ),
           );
         }
@@ -518,7 +527,7 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
 
   Future<void> _send() async {
     final text = _composer.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _sending) return;
 
     try {
       final profile = ProfileControllerProvider.maybeOf(context);
@@ -534,6 +543,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         }
         return;
       }
+
+      setState(() => _sending = true);
 
       final uri = Uri.parse(
         '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts',
@@ -551,15 +562,20 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
 
       if (resp.statusCode == 201) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final msg = ForumMessage.fromJson(data);
+        final msg = ForumMessage.fromJson(
+          data,
+          currentUserId: userId,
+        );
 
         setState(() {
           _messages.add(msg);
           widget.forum.messagesCount = _messages.length;
           widget.forum.lastUpdated = msg.timestamp;
+          _sending = false;
         });
         _composer.clear();
       } else {
+        setState(() => _sending = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -571,6 +587,7 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         }
       }
     } catch (e) {
+      setState(() => _sending = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -581,10 +598,212 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
     }
   }
 
+  Future<void> _pickAndSendFile() async {
+    if (_sending) return;
+
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final base64Data = base64Encode(bytes);
+    final fileName = file.name;
+    final mimeType = _detectMimeType(file);
+
+    await _sendFileMessage(
+      base64Data: base64Data,
+      fileName: fileName,
+      mimeType: mimeType,
+      text: _composer.text.trim().isEmpty ? null : _composer.text.trim(),
+    );
+
+    _composer.clear();
+  }
+
+  Future<void> _sendFileMessage({
+    required String base64Data,
+    required String fileName,
+    required String mimeType,
+    String? text,
+  }) async {
+    try {
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo determinar el usuario actual'),
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() => _sending = true);
+
+      final uri = Uri.parse(
+        '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts-with-file',
+      );
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+        body: jsonEncode({
+          'text': text ?? '',
+          'fileName': fileName,
+          'mimeType': mimeType,
+          'base64Data': base64Data,
+        }),
+      );
+
+      if (resp.statusCode == 201) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final msg = ForumMessage.fromJson(
+          data,
+          currentUserId: userId,
+        );
+
+        setState(() {
+          _messages.add(msg);
+          widget.forum.messagesCount = _messages.length;
+          widget.forum.lastUpdated = msg.timestamp;
+          _sending = false;
+        });
+      } else {
+        setState(() => _sending = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error al enviar archivo: ${resp.statusCode}',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _sending = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al enviar archivo: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openAttachmentFile(ForumAttachment att) async {
+    try {
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo determinar el usuario actual'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final url =
+          '${Env.apiBaseUrl}/api/forums/attachments/${att.id}/file';
+
+      final headers = {
+        'x-role': 'usuario',
+        'x-user-id': userId.toString(),
+      };
+
+      final resp = await http.get(Uri.parse(url), headers: headers);
+
+      if (resp.statusCode != 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'No se pudo descargar el archivo (HTTP ${resp.statusCode})',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final safeName = att.fileName.isNotEmpty ? att.fileName : 'archivo';
+      final filePath = '${tempDir.path}/$safeName';
+
+      final file = File(filePath);
+      await file.writeAsBytes(resp.bodyBytes);
+
+      final result = await OpenFilex.open(filePath);
+
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo abrir el archivo en el dispositivo'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al abrir archivo: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  String _detectMimeType(PlatformFile file) {
+    final ext = (file.extension ?? '').toLowerCase();
+
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'txt':
+        return 'text/plain';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final profile = ProfileControllerProvider.maybeOf(context);
-    final myName = (profile?.displayName ?? '').trim();
+    final myName =
+    (ProfileControllerProvider.maybeOf(context)?.displayName ?? '')
+        .trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -610,12 +829,66 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
               itemCount: _messages.length,
               itemBuilder: (_, i) {
                 final msg = _messages[i];
-                final isMine = myName.isNotEmpty &&
-                    msg.author == myName; // burbuja "mía"
+                final isMine = msg.isMine ||
+                    (myName.isNotEmpty && msg.author == myName);
 
-                return MessageBubble(
-                  message: msg,
-                  isMine: isMine,
+                final timeStr = DateFormat('HH:mm')
+                    .format(msg.timestamp.toLocal());
+
+                return Align(
+                  alignment: isMine
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    margin:
+                    const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isMine
+                          ? Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          : Theme.of(context)
+                          .colorScheme
+                          .surfaceVariant,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          msg.author,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (msg.text.isNotEmpty) ...[
+                          Text(msg.text),
+                          const SizedBox(height: 8),
+                        ],
+                        if (msg.attachments.isNotEmpty)
+                          _buildAttachmentsRow(
+                              context, msg, _currentUserId),
+                        const SizedBox(height: 4),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
@@ -626,19 +899,31 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _composer,
-                    decoration: const InputDecoration(
-                        hintText: 'Escribe un mensaje…'),
-                    onSubmitted: (_) => _send(),
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.attach_file),
+                    onPressed: _sending ? null : _pickAndSendFile,
                   ),
-                ),
+                  Expanded(
+                    child: TextField(
+                      controller: _composer,
+                      decoration: const InputDecoration(
+                        hintText: 'Escribe un mensaje…',
+                      ),
+                      onSubmitted: (_) => _send(),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   IconButton(
-                    onPressed: _send,
-                    icon: const Icon(Icons.send_rounded),
+                    onPressed: _sending ? null : _send,
+                    icon: _sending
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child:
+                      CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.send_rounded),
                   ),
                 ],
               ),
@@ -648,7 +933,91 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
       ),
     );
   }
+
+  Widget _buildAttachmentsRow(
+      BuildContext context,
+      ForumMessage msg,
+      int? userId,
+      ) {
+    final uid = userId ?? 0;
+
+    final headers = {
+      'x-role': 'usuario',
+      'x-user-id': uid.toString(),
+    };
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: msg.attachments.map((att) {
+        final isImage = att.mimeType.startsWith('image/');
+        final url =
+            '${Env.apiBaseUrl}/api/forums/attachments/${att.id}/file';
+
+        if (isImage) {
+          // Imagen en miniatura + pantalla completa al tocar
+          return GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FullscreenImageScreen(
+                    imageUrl: url,
+                    headers: headers,
+                  ),
+                ),
+              );
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                url,
+                headers: headers,
+                width: 140,
+                height: 140,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => Container(
+                  width: 140,
+                  height: 140,
+                  color: Colors.black26,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.broken_image, size: 32),
+                ),
+              ),
+            ),
+          );
+        } else {
+          // Documento (PDF, Word, etc.)
+          return GestureDetector(
+            onTap: () => _openAttachmentFile(att),
+            child: Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.insert_drive_file, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    att.fileName,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      }).toList(),
+    );
+  }
 }
+
+/* ============================
+ *  PROGRESO (igual que antes)
+ * ========================== */
 
 class _UserProgressScreen extends StatelessWidget {
   const _UserProgressScreen();
@@ -832,6 +1201,10 @@ class _UserProgressChart extends StatelessWidget {
   }
 }
 
+/* ============================
+ *  MÁS
+ * ========================== */
+
 class _UserMoreScreen extends StatelessWidget {
   const _UserMoreScreen();
   @override
@@ -886,4 +1259,3 @@ Future<void> _confirmLogout(BuildContext context) async {
         .pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 }
-

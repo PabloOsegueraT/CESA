@@ -1,3 +1,5 @@
+import '../core/constants/env.dart'; // 👈 ajusta la ruta según tu proyecto
+
 class Forum {
   final String id;
   String title;
@@ -24,21 +26,10 @@ class Forum {
   })  : members = members ?? <String>[],
         lastUpdated = lastUpdated ?? DateTime.now();
 
-  /// Crea un Forum desde el JSON que manda tu API
-  /// {
-  ///   "id": 1,
-  ///   "title": "...",
-  ///   "description": "...",
-  ///   "isPublic": true/false,
-  ///   "members": ["user1@mail.com", "user2@mail.com"],
-  ///   "messagesCount": 0
-  /// }
   factory Forum.fromJson(Map<String, dynamic> json) {
-    // Puede venir numérico o string
     final rawId = json['id'];
     final idStr = rawId?.toString() ?? '';
 
-    // messagesCount viene como int, pero por si acaso:
     final rawCount = json['messagesCount'];
     final intCount = switch (rawCount) {
       int v => v,
@@ -46,29 +37,23 @@ class Forum {
       _ => 0,
     };
 
-    // isPublic -> forAll
     final isPublic = json['isPublic'];
     final boolForAll = (isPublic is bool)
         ? isPublic
         : (isPublic == 1 || isPublic == '1');
 
-    // members: lista de strings
     final membersList = (json['members'] as List<dynamic>? ?? [])
         .map((e) => e.toString())
         .toList();
 
-    // lastUpdated: si el back algún día manda `updated_at` o `lastUpdated`
     DateTime parsedLastUpdated = DateTime.now();
     final rawLastUpdated = json['lastUpdated'] ?? json['updated_at'];
     if (rawLastUpdated is String && rawLastUpdated.isNotEmpty) {
       try {
         parsedLastUpdated = DateTime.parse(rawLastUpdated);
-      } catch (_) {
-        // si falla el parseo, nos quedamos con DateTime.now()
-      }
+      } catch (_) {}
     }
 
-    // closed: tu API aún no lo manda, así que lo tomamos del json si existe, si no false
     final rawClosed = json['closed'];
     final boolClosed = (rawClosed is bool)
         ? rawClosed
@@ -86,7 +71,6 @@ class Forum {
     );
   }
 
-  /// Opcional: por si en algún momento quieres enviar un foro al back
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -101,6 +85,60 @@ class Forum {
   }
 }
 
+/* =======================
+ *  Adjuntos de foros
+ * ===================== */
+
+class ForumAttachment {
+  final String id;
+  final String fileName;
+  final String mimeType;
+  final int sizeBytes;
+
+  ForumAttachment({
+    required this.id,
+    required this.fileName,
+    required this.mimeType,
+    required this.sizeBytes,
+  });
+
+  /// ¿Es una imagen? (png, jpg, etc.)
+  bool get isImage => mimeType.toLowerCase().startsWith('image/');
+
+  /// URL construida a partir del id
+  /// Coincide con la ruta del backend:
+  ///   GET /api/forums/attachments/:id/file
+  String get url =>
+      '${Env.apiBaseUrl}/api/forums/attachments/$id/file';
+
+  factory ForumAttachment.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'];
+    final idStr = rawId?.toString() ?? '';
+
+    final mime = (json['mimeType'] ?? json['mime_type'] ?? 'application/octet-stream')
+        .toString();
+
+    final rawSize = json['sizeBytes'] ?? json['size_bytes'];
+
+    return ForumAttachment(
+      id: idStr,
+      fileName: json['fileName']?.toString() ??
+          json['file_name']?.toString() ??
+          '',
+      mimeType: mime,
+      sizeBytes: switch (rawSize) {
+        int v => v,
+        String v => int.tryParse(v) ?? 0,
+        _ => 0,
+      },
+    );
+  }
+}
+
+/* =======================
+ *  Mensajes de foro
+ * ===================== */
+
 class ForumMessage {
   final String id;
   final String author; // nombre visible
@@ -108,6 +146,7 @@ class ForumMessage {
   final DateTime timestamp;
   final bool isAdmin;
   final bool isMine;
+  final List<ForumAttachment> attachments;
 
   ForumMessage({
     required this.id,
@@ -116,11 +155,12 @@ class ForumMessage {
     required this.timestamp,
     this.isAdmin = false,
     this.isMine = false,
+    this.attachments = const [],
   });
 
   factory ForumMessage.fromJson(
       Map<String, dynamic> json, {
-        int? currentUserId, // 👈 NUEVO
+        int? currentUserId,
       }) {
     final rawId = json['id'];
     final idStr = rawId?.toString() ?? '';
@@ -141,7 +181,6 @@ class ForumMessage {
       _ => false,
     };
 
-    // 👇 leemos el authorId que manda el backend
     int? authorId;
     final rawAuthorId = json['authorId'];
     if (rawAuthorId is int) {
@@ -149,9 +188,13 @@ class ForumMessage {
     } else if (rawAuthorId is String) {
       authorId = int.tryParse(rawAuthorId);
     }
-
     final boolMine =
         currentUserId != null && authorId != null && authorId == currentUserId;
+
+    // Adjuntos
+    final atts = (json['attachments'] as List<dynamic>? ?? [])
+        .map((e) => ForumAttachment.fromJson(e as Map<String, dynamic>))
+        .toList();
 
     return ForumMessage(
       id: idStr,
@@ -160,6 +203,7 @@ class ForumMessage {
       timestamp: ts,
       isAdmin: boolAdmin,
       isMine: boolMine,
+      attachments: atts,
     );
   }
 }
