@@ -8,6 +8,8 @@ import '../../../design_system/widgets/task_card.dart';
 import 'task_detail_screen.dart';
 import '../../../core/constants/env.dart'; // Env.apiBaseUrl
 import 'task_form_screen.dart';
+import '../../../state/profile_controller.dart';
+import 'task_detail_screen.dart';
 
 enum _DateFilter { all, today, thisWeek }
 
@@ -21,6 +23,8 @@ class AdminTasksScreen extends StatefulWidget {
 
   @override
   State<AdminTasksScreen> createState() => _AdminTasksScreenState();
+
+
 }
 
 class _AdminTasksScreenState extends State<AdminTasksScreen>
@@ -360,14 +364,18 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
             controller: _tab,
             children: [
               _TasksList(
-                tasks:
-                _applyAllFilters(myTasks, alsoFilterUser: false),
+                tasks: _applyAllFilters(myTasks, alsoFilterUser: false),
                 onTap: _openDetail,
+                onEdit: _editTask,
+                onResetToPending: _resetTaskToPending,
+                onDelete: _deleteTask,
               ),
               _TasksList(
-                tasks:
-                _applyAllFilters(teamTasks, alsoFilterUser: true),
+                tasks: _applyAllFilters(teamTasks, alsoFilterUser: true),
                 onTap: _openDetail,
+                onEdit: _editTask,
+                onResetToPending: _resetTaskToPending,
+                onDelete: _deleteTask,
               ),
             ],
           ),
@@ -435,7 +443,13 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
   Future<void> _openDetail(Task t) async {
     final updated = await Navigator.of(context).push<Task>(
       MaterialPageRoute(
-        builder: (_) => UserTaskDetailScreen(task: t),
+        builder: (_) => UserTaskDetailScreen(
+          task: t,
+          role: 'admin',      // 👈 MUY IMPORTANTE: exactamente 'admin'
+          userId: 1,          // 👈 en dev, tu admin “demo”
+          canManageTask: true,
+          canDeleteAttachments: true,
+        ),
       ),
     );
 
@@ -448,8 +462,7 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
 
     // Actualizamos en memoria
     setState(() {
-      final idx =
-      _tasks.indexWhere((element) => element.id == updated.id);
+      final idx = _tasks.indexWhere((element) => element.id == updated.id);
       if (idx != -1) {
         _tasks[idx] = updated;
       }
@@ -662,15 +675,342 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
       },
     );
   }
+
+  // Helper para prioridad
+  String _priorityToCode(TaskPriority p) => switch (p) {
+    TaskPriority.low => 'low',
+    TaskPriority.medium => 'medium',
+    TaskPriority.high => 'high',
+  };
+
+  void _openMore(BuildContext ctx, Task task) {
+    showModalBottomSheet(
+      context: ctx,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Editar tarea'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _editTask(task);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.reply_outlined),
+              title: const Text('Devolver a pendiente'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final updated = task.copyWith(status: TaskStatus.pending);
+                await _updateTaskStatus(updated);
+                setState(() {
+                  final idx =
+                  _tasks.indexWhere((e) => e.id == updated.id);
+                  if (idx != -1) _tasks[idx] = updated;
+                });
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text(
+                'Eliminar tarea',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDeleteTask(task);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Future<void> _confirmDeleteTask(Task task) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar tarea'),
+        content: Text(
+          '¿Seguro que quieres eliminar la tarea "${task.title}"?\n\n'
+              'Se eliminarán también las evidencias asociadas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      await _deleteTask(task);
+    }
+  }
+
+
+  Future<void> _editTask(Task task) async {
+    // 1) Cargar usuarios de la API (igual que en openCreateTask)
+    List<Map<String, dynamic>> users = [];
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/users');
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin', // o 'root'
+          'x-user-id': '1',
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['users'] as List<dynamic>? ?? []);
+        users = list
+            .map((u) => {
+          'id': u['id'] as int,
+          'name': (u['name'] ?? '').toString(),
+          'email': (u['email'] ?? '').toString(),
+        })
+            .toList()
+          ..sort(
+                (a, b) => a['name'].toString().compareTo(b['name'].toString()),
+          );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+              Text('Error al cargar usuarios para editar: ${resp.statusCode}'),
+            ),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+            Text('Error de red al cargar usuarios para editar: $e'),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (users.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No hay usuarios para asignar tareas'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final assigneeNames = users.map((u) => u['name'] as String).toList();
+
+    // 2) Abrir el formulario en modo edición
+    final Task? updatedLocal = await Navigator.of(context).push<Task>(
+      MaterialPageRoute(
+        builder: (_) => AdminTaskFormScreen(
+          assignees: assigneeNames,
+          initialTask: task,
+        ),
+      ),
+    );
+
+    if (updatedLocal == null) return; // canceló
+
+    // 3) Mapear prioridad enum -> string
+    String priorityCode;
+    switch (updatedLocal.priority) {
+      case TaskPriority.low:
+        priorityCode = 'low';
+        break;
+      case TaskPriority.medium:
+        priorityCode = 'medium';
+        break;
+      case TaskPriority.high:
+        priorityCode = 'high';
+        break;
+    }
+
+    // 4) Buscar id del usuario asignado por nombre
+    final assigneeName = updatedLocal.assignee;
+    final assignee = users.firstWhere(
+          (u) => u['name'] == assigneeName,
+      orElse: () => {'id': null},
+    );
+    final int? assigneeId = assignee['id'] as int?;
+
+    // 5) Cuerpo para el backend
+    final body = {
+      'title': updatedLocal.title,
+      'description': updatedLocal.description,
+      'priority': priorityCode,
+      'dueDate': updatedLocal.dueDate.toIso8601String().substring(0, 10),
+      'assigneeId': assigneeId,
+    };
+
+    // 6) PUT /api/tasks/:id
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/tasks/${task.id}');
+      final resp = await http.put(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin', // o 'root'
+          'x-user-id': '1',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final updatedFromApi = Task.fromJson(data);
+
+        if (mounted) {
+          setState(() {
+            final idx = _tasks.indexWhere((t) => t.id == updatedFromApi.id);
+            if (idx != -1) {
+              _tasks[idx] = updatedFromApi;
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tarea actualizada')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+              Text('Error al actualizar tarea: ${resp.statusCode}'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de red al actualizar tarea: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetTaskToPending(Task task) async {
+    final updated = task.copyWith(status: TaskStatus.pending);
+    await _updateTaskStatus(updated);
+    if (mounted) {
+      setState(() {
+        final idx = _tasks.indexWhere((t) => t.id == task.id);
+        if (idx != -1) {
+          _tasks[idx] = updated;
+        }
+      });
+    }
+  }
+
+  Future<void> _deleteTask(Task task) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar tarea'),
+        content: Text(
+          '¿Seguro que quieres eliminar la tarea "${task.title}"?\n\n'
+              'Se eliminarán también las evidencias asociadas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/tasks/${task.id}');
+      final resp = await http.delete(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin', // o 'root'
+          'x-user-id': '1',
+        },
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        if (mounted) {
+          setState(() {
+            _tasks.removeWhere((t) => t.id == task.id);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tarea eliminada')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+              Text('Error al eliminar tarea: ${resp.statusCode}'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+            Text('Error de red al eliminar tarea: $e'),
+          ),
+        );
+      }
+    }
+  }
+
 }
 
 class _TasksList extends StatelessWidget {
   final List<Task> tasks;
   final void Function(Task) onTap;
+  final void Function(Task) onEdit;
+  final void Function(Task) onResetToPending;
+  final void Function(Task) onDelete;
 
   const _TasksList({
     required this.tasks,
     required this.onTap,
+    required this.onEdit,
+    required this.onResetToPending,
+    required this.onDelete,
   });
 
   @override
@@ -706,19 +1046,33 @@ class _TasksList extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
-      builder: (_) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Editar'),
-              onTap: () => Navigator.pop(context),
+              title: const Text('Editar tarea'),
+              onTap: () {
+                Navigator.pop(ctx);
+                onEdit(task);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.reply_outlined),
               title: const Text('Devolver a pendiente'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(ctx);
+                onResetToPending(task);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Eliminar tarea'),
+              onTap: () {
+                Navigator.pop(ctx);
+                onDelete(task);
+              },
             ),
             const SizedBox(height: 8),
           ],

@@ -344,58 +344,6 @@ class _AdminShellState extends State<AdminShell> {
   }
 }
 
-/// Lista de tareas (si la quieres usar en otro lado)
-class _AdminTasksList extends StatelessWidget {
-  final List<Task> tasks;
-  const _AdminTasksList({required this.tasks});
-
-  @override
-  Widget build(BuildContext context) {
-    if (tasks.isEmpty) {
-      return const Center(
-        child: Text('No hay tareas por ahora'),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: tasks.length,
-      itemBuilder: (_, i) => TaskCard(
-        task: tasks[i],
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => UserTaskDetailScreen(task: tasks[i]),
-          ),
-        ),
-        onMore: () => _openMore(context, tasks[i]),
-      ),
-    );
-  }
-
-  void _openMore(BuildContext context, Task task) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Editar'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.reply_outlined),
-              title: const Text('Devolver a pendiente'),
-              onTap: () => Navigator.pop(context),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _AdminMoreScreen extends StatelessWidget {
   const _AdminMoreScreen();

@@ -215,6 +215,9 @@ class _UserTasksListState extends State<_UserTasksList> {
       );
     }
 
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final int userId = profile?.userId ?? 0;
+
     return ListView.builder(
       itemCount: widget.tasks.length,
       itemBuilder: (_, i) => TaskCard(
@@ -222,11 +225,16 @@ class _UserTasksListState extends State<_UserTasksList> {
         onTap: () async {
           final updated = await Navigator.of(context).push<Task>(
             MaterialPageRoute(
-              builder: (_) => UserTaskDetailScreen(task: widget.tasks[i]),
+              builder: (_) => UserTaskDetailScreen(
+                task: widget.tasks[i],
+                role: 'usuario',
+                userId: userId,
+                canManageTask: false,        // el usuario no edita meta de la tarea
+                canDeleteAttachments: true,  // pero SÍ puede borrar sus evidencias
+              ),
             ),
           );
           if (updated != null) {
-            // ✅ Actualizamos en el padre, que es el dueño de _tasks
             widget.onTaskUpdated(updated);
           }
         },
