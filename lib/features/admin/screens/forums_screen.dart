@@ -10,8 +10,6 @@ import '../../../state/profile_controller.dart'; // 👈 NUEVO
 // Al tope del archivo, después de los imports:
 enum AudienceMode { all, selected }
 
-
-
 class AdminForumsScreen extends StatefulWidget {
   const AdminForumsScreen({super.key, required this.assignees});
   final List<String> assignees; // ← NUEVO

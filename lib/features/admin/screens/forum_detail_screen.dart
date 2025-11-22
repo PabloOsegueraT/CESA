@@ -1,18 +1,18 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/constants/env.dart';
 import '../../../models/forum.dart';
-import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
-import 'fullscreen_image_screen.dart'; // importa el archivo de arriba
-import 'dart:io';
-import '../../../state/profile_controller.dart';
-import '../../../core/constants/env.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:open_filex/open_filex.dart';
+
+import 'fullscreen_image_screen.dart';
+import '../../../state/profile_controller.dart'; // si lo usas en otros lados
 
 class AdminForumDetailScreen extends StatefulWidget {
   const AdminForumDetailScreen({
@@ -25,7 +25,8 @@ class AdminForumDetailScreen extends StatefulWidget {
   final int currentUserId;
 
   @override
-  State<AdminForumDetailScreen> createState() => _AdminForumDetailScreenState();
+  State<AdminForumDetailScreen> createState() =>
+      _AdminForumDetailScreenState();
 }
 
 class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
@@ -40,6 +41,37 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
     _loadMessages();
   }
 
+  // ============================
+  // Helpers para fechas
+  // ============================
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    final aa = a.toLocal();
+    final bb = b.toLocal();
+    return aa.year == bb.year &&
+        aa.month == bb.month &&
+        aa.day == bb.day;
+  }
+
+  String _dayLabel(DateTime dt) {
+    final local = dt.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final msgDay = DateTime(local.year, local.month, local.day);
+
+    final diff = msgDay.difference(today).inDays;
+
+    if (diff == 0) return 'Hoy';
+    if (diff == -1) return 'Ayer';
+
+    // Ejemplo: 21/11/2025
+    return DateFormat('dd/MM/yyyy').format(local);
+  }
+
+  // ============================
+  // Carga de mensajes
+  // ============================
+
   Future<void> _loadMessages() async {
     try {
       final uri =
@@ -48,8 +80,8 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          'x-role': 'admin', // en dev; luego puedes usar el rol real
-          'x-user-id': widget.currentUserId.toString(), // 👈 USAR EL REAL
+          'x-role': 'admin',
+          'x-user-id': widget.currentUserId.toString(),
         },
       );
 
@@ -59,7 +91,7 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
             .map(
               (e) => ForumMessage.fromJson(
             e as Map<String, dynamic>,
-            currentUserId: widget.currentUserId, // 👈 AQUÍ
+            currentUserId: widget.currentUserId,
           ),
         )
             .toList();
@@ -215,6 +247,144 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
     }
   }
 
+  // ============================
+  // Abrir archivos adjuntos
+  // ============================
+
+  Future<void> _openAttachmentFile(ForumAttachment att) async {
+    try {
+      final uri = Uri.parse(att.url);
+
+      final headers = {
+        'x-role': 'admin',
+        'x-user-id': widget.currentUserId.toString(),
+      };
+
+      final resp = await http.get(uri, headers: headers);
+
+      if (resp.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+            Text('No se pudo descargar el archivo (HTTP ${resp.statusCode})'),
+          ),
+        );
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final safeName = att.fileName.isNotEmpty ? att.fileName : 'archivo';
+      final filePath = '${tempDir.path}/$safeName';
+
+      final file = File(filePath);
+      await file.writeAsBytes(resp.bodyBytes);
+
+      final result = await OpenFilex.open(filePath);
+
+      if (result.type != ResultType.done) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo abrir el archivo en el dispositivo'),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al abrir archivo: $e'),
+        ),
+      );
+    }
+  }
+
+  // ============================
+  // Enviar archivo
+  // ============================
+
+  Future<void> _pickAndSendFile() async {
+    if (_sending) return;
+
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final base64Data = base64Encode(bytes);
+    final fileName = file.name;
+    final mimeType = _detectMimeType(file);
+
+    await _sendFileMessage(
+      base64Data: base64Data,
+      fileName: fileName,
+      mimeType: mimeType,
+      text: _msgCtrl.text.trim().isEmpty ? null : _msgCtrl.text.trim(),
+    );
+
+    _msgCtrl.clear();
+  }
+
+  Future<void> _sendFileMessage({
+    required String base64Data,
+    required String fileName,
+    required String mimeType,
+    String? text,
+  }) async {
+    setState(() => _sending = true);
+
+    try {
+      final uri = Uri.parse(
+          '${Env.apiBaseUrl}/api/forums/${widget.forum.id}/posts-with-file');
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'admin',
+          'x-user-id': widget.currentUserId.toString(),
+        },
+        body: jsonEncode({
+          'text': text ?? '',
+          'fileName': fileName,
+          'mimeType': mimeType,
+          'base64Data': base64Data,
+        }),
+      );
+
+      if (resp.statusCode == 201) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final newMsg = ForumMessage.fromJson(
+          data,
+          currentUserId: widget.currentUserId,
+        );
+
+        setState(() {
+          messages.add(newMsg);
+          _sending = false;
+        });
+      } else {
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al enviar archivo: ${resp.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de red al enviar archivo: $e'),
+        ),
+      );
+    }
+  }
+
+  // ============================
+  // Enviar mensaje de texto
+  // ============================
+
   Future<void> _sendMessage() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty || _sending) return;
@@ -228,8 +398,8 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          'x-role': 'admin', // en dev
-          'x-user-id': widget.currentUserId.toString(), // 👈 USAR EL REAL
+          'x-role': 'admin',
+          'x-user-id': widget.currentUserId.toString(),
         },
         body: jsonEncode({'text': text}),
       );
@@ -238,7 +408,7 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final newMsg = ForumMessage.fromJson(
           data,
-          currentUserId: widget.currentUserId, // 👈 AQUÍ TAMBIÉN
+          currentUserId: widget.currentUserId,
         );
 
         setState(() {
@@ -263,6 +433,10 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
       );
     }
   }
+
+  // ============================
+  // Detectar mimeType
+  // ============================
 
   String _detectMimeType(PlatformFile file) {
     final ext = (file.extension ?? '').toLowerCase();
@@ -292,7 +466,6 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
       case 'txt':
         return 'text/plain';
       default:
-      // Por si no sabemos la extensión
         return 'application/octet-stream';
     }
   }
@@ -302,6 +475,10 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
     _msgCtrl.dispose();
     super.dispose();
   }
+
+  // ============================
+  // UI
+  // ============================
 
   @override
   Widget build(BuildContext context) {
@@ -326,65 +503,115 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: messages.length,
-                  itemBuilder: (_, i) {
-                    final m = messages[i];
+                itemBuilder: (_, i) {
+                  final m = messages[i];
 
-                    // 👇 Formatear solo la hora (24h). Si quieres 12h con am/pm: 'hh:mm a'
-                    final timeStr = DateFormat('HH:mm').format(m.timestamp.toLocal());
+                  // Mostrar encabezado de día cuando cambia la fecha
+                  bool showDayHeader = false;
+                  if (i == 0) {
+                    showDayHeader = true;
+                  } else {
+                    final prev = messages[i - 1];
+                    showDayHeader = !_isSameDay(m.timestamp, prev.timestamp);
+                  }
 
-                    return Align(
-                      alignment: m.isMine ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: m.isMine
-                              ? Theme.of(context).colorScheme.primaryContainer
-                              : Theme.of(context).colorScheme.surfaceVariant,
-                          borderRadius: BorderRadius.circular(12),
+                  final timeStr =
+                  DateFormat('HH:mm').format(m.timestamp.toLocal());
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (showDayHeader)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant
+                                    .withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                _dayLabel(m.timestamp),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.8),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              m.author,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
 
-                            // 🔹 Texto (si hay)
-                            if (m.text.isNotEmpty) ...[
-                              Text(m.text),
-                              const SizedBox(height: 8),
+                      // Burbuja de mensaje
+                      Align(
+                        alignment: m.isMine
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: m.isMine
+                                ? Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                : Theme.of(context)
+                                .colorScheme
+                                .surfaceVariant,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                m.author,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+
+                              if (m.text.isNotEmpty) ...[
+                                Text(m.text),
+                                const SizedBox(height: 8),
+                              ],
+
+                              if (m.attachments.isNotEmpty)
+                                _buildAttachmentsRow(context, m),
+
+                              const SizedBox(height: 4),
+                              Text(
+                                timeStr,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.6),
+                                ),
+                              ),
                             ],
-
-                            // 🔹 Adjuntos (imágenes y documentos)
-                            if (m.attachments.isNotEmpty)
-                              _buildAttachmentsRow(context, m),
-
-                            const SizedBox(height: 4),
-                            Text(
-                              timeStr,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.6),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    );
-                  }
+                    ],
+                  );
+                },
               ),
             ),
 
@@ -429,13 +656,8 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
   }
 
   Widget _buildAttachmentsRow(BuildContext context, ForumMessage m) {
-    // Si tienes ProfileController:
-    // final profile = ProfileControllerProvider.maybeOf(context);
-    // final role = profile?.role ?? 'admin';
-    // final userId = profile?.userId ?? widget.currentUserId;
-
     final headers = {
-      'x-role': 'admin', // en admin; en pantalla de usuario pon 'usuario'
+      'x-role': 'admin',
       'x-user-id': widget.currentUserId.toString(),
     };
 
@@ -444,7 +666,6 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
       runSpacing: 8,
       children: m.attachments.map((att) {
         if (att.isImage) {
-          // 🔹 Miniatura de imagen
           return GestureDetector(
             onTap: () {
               Navigator.of(context).push(
@@ -475,11 +696,11 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
             ),
           );
         } else {
-          // Documento (PDF, Word, etc.)
           return GestureDetector(
             onTap: () => _openAttachmentFile(att),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.black26,
                 borderRadius: BorderRadius.circular(10),
@@ -501,5 +722,4 @@ class _AdminForumDetailScreenState extends State<AdminForumDetailScreen> {
       }).toList(),
     );
   }
-
 }
