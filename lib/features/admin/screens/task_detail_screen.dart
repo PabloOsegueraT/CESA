@@ -1,19 +1,38 @@
-// lib/features/user/screens/task_detail_screen.dart
 import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/constants/env.dart';
 import '../../../models/task.dart';
-import '../../../core/constants/env.dart'; // Env.apiBaseUrl
 import '../../../models/task_attachment.dart';
 import '../../user/screens/attachment_preview_screen.dart';
 
-
 class UserTaskDetailScreen extends StatefulWidget {
   final Task task;
-  const UserTaskDetailScreen({super.key, required this.task});
+
+  /// Rol actual: 'usuario', 'admin', 'root'
+  final String role;
+
+  /// ID real del usuario logueado
+  final int userId;
+
+  /// Si puede gestionar la tarea (editarla / administrarla)
+  final bool canManageTask;
+
+  /// Si puede eliminar evidencias
+  final bool canDeleteAttachments;
+
+  const UserTaskDetailScreen({
+    super.key,
+    required this.task,
+    required this.role,
+    required this.userId,
+    this.canManageTask = false,
+    this.canDeleteAttachments = true,
+  });
 
   @override
   State<UserTaskDetailScreen> createState() => _UserTaskDetailScreenState();
@@ -23,7 +42,7 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
   late Task _current;
   bool _saving = false;
 
-  // ===== Estado de evidencias =====
+  // Evidencias
   List<TaskAttachment> _attachments = [];
   bool _loadingAttachments = true;
   bool _uploadingAttachment = false;
@@ -35,61 +54,7 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
     _loadAttachments();
   }
 
-  // ==== SECCIÓN VISUAL DE EVIDENCIAS ====
-  Widget _buildAttachmentsSection(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Cargando
-    if (_loadingAttachments) {
-      return Row(
-        children: const [
-          Text(
-            'Evidencias',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          SizedBox(width: 8),
-          SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ],
-      );
-    }
-
-    // Sin evidencias
-    if (_attachments.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Evidencias',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Aún no hay evidencias para esta tarea.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Lista de evidencias
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Evidencias',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        ..._attachments.map((a) => _buildAttachmentTile(context, a)),
-      ],
-    );
-  }
+  // ===================== UI PRINCIPAL =====================
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +135,6 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
 
           _buildAttachmentsSection(context),
 
-
           const SizedBox(height: 16),
 
           // Acciones
@@ -215,7 +179,133 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
     );
   }
 
-  // =================== LÓGICA: evidencias ===================
+  // =================== SECCIÓN VISUAL DE EVIDENCIAS ===================
+
+  Widget _buildAttachmentsSection(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_loadingAttachments) {
+      return Row(
+        children: const [
+          Text(
+            'Evidencias',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          SizedBox(width: 8),
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ],
+      );
+    }
+
+    if (_attachments.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Evidencias',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Aún no hay evidencias para esta tarea.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Evidencias',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        ..._attachments.map((a) => _buildAttachmentTile(context, a)),
+      ],
+    );
+  }
+
+  Widget _buildAttachmentTile(BuildContext context, TaskAttachment a) {
+    final theme = Theme.of(context);
+    final icon = a.isImage
+        ? Icons.image_outlined
+        : a.isPdf
+        ? Icons.picture_as_pdf_outlined
+        : Icons.insert_drive_file_outlined;
+
+    final sizeKb = (a.sizeBytes / 1024).toStringAsFixed(1);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: CircleAvatar(
+          child: Icon(icon, size: 20),
+        ),
+        title: Text(
+          a.fileName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '${a.mimeType} • ${sizeKb} KB',
+          style: theme.textTheme.bodySmall,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Abrir',
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => _openAttachmentPreview(context, a),
+            ),
+            if (widget.canDeleteAttachments)
+              IconButton(
+                tooltip: 'Eliminar',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _confirmDeleteAttachment(a),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openAttachmentPreview(BuildContext context, TaskAttachment a) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AttachmentPreviewScreen(
+          taskId: _current.id,
+          attachment: a,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAttachment(TaskAttachment a) async {
+    final url = '${Env.apiBaseUrl}/api/attachments/${a.id}/download';
+    final uri = Uri.parse(url);
+
+    if (!await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    )) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir la evidencia')),
+      );
+    }
+  }
+
+  // =================== LÓGICA: CARGAR / SUBIR / ELIMINAR EVIDENCIAS ===================
 
   Future<void> _loadAttachments() async {
     setState(() => _loadingAttachments = true);
@@ -226,10 +316,10 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
 
       final resp = await http.get(
         uri,
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
-          'x-role': 'usuario', // en dev
-          'x-user-id': '2',
+          'x-role': widget.role.toLowerCase(),
+          'x-user-id': widget.userId.toString(),
         },
       );
 
@@ -266,7 +356,7 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
   Future<void> _pickAndUploadAttachment() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        withData: true, // para tener los bytes directamente
+        withData: true,
         type: FileType.any,
       );
 
@@ -277,8 +367,7 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
       if (bytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content:
-            Text('No se pudo leer el archivo seleccionado'),
+            content: Text('No se pudo leer el archivo seleccionado'),
           ),
         );
         return;
@@ -294,10 +383,10 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
 
       final resp = await http.post(
         uri,
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
-          'x-role': 'usuario', // en dev
-          'x-user-id': '2',
+          'x-role': widget.role.toLowerCase(),
+          'x-user-id': widget.userId.toString(),
         },
         body: jsonEncode({
           'fileName': file.name,
@@ -322,9 +411,8 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
         setState(() => _uploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Error al subir evidencia: ${resp.statusCode}',
-            ),
+            content:
+            Text('Error al subir evidencia: ${resp.statusCode}'),
           ),
         );
       }
@@ -337,96 +425,98 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
     }
   }
 
-  Widget _buildAttachmentTile(BuildContext context, TaskAttachment a) {
-    final theme = Theme.of(context);
-    final icon = a.isImage
-        ? Icons.image_outlined
-        : a.isPdf
-        ? Icons.picture_as_pdf_outlined
-        : Icons.insert_drive_file_outlined;
-
-    final sizeKb = (a.sizeBytes / 1024).toStringAsFixed(1);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Icon(icon, size: 20),
+  Future<void> _confirmDeleteAttachment(TaskAttachment a) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar evidencia'),
+        content: Text(
+          '¿Seguro que quieres eliminar "${a.fileName}"?\n'
+              'Esta acción no se puede deshacer.',
         ),
-        title: Text(
-          a.fileName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          '${a.mimeType} • ${sizeKb} KB',
-          style: theme.textTheme.bodySmall,
-        ),
-        trailing: const Icon(Icons.open_in_new),
-        // ✅ Ahora abrimos la pantalla de preview dentro de la app
-        onTap: () => _openAttachmentPreview(context, a),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Eliminar'),
+          ),
+        ],
       ),
     );
+
+    if (ok == true) {
+      await _deleteAttachment(a);
+    }
   }
 
-  void _openAttachmentPreview(BuildContext context, TaskAttachment a) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AttachmentPreviewScreen(
-          taskId: _current.id,    // _current.id es String, está bien
-          attachment: a,
-        ),
-      ),
-    );
-  }
+  Future<void> _deleteAttachment(TaskAttachment a) async {
+    try {
+      final uri = Uri.parse(
+        '${Env.apiBaseUrl}/api/tasks/${_current.id}/attachments/${a.id}',
+      );
 
-  Future<void> _openAttachment(TaskAttachment a) async {
-    // Construimos la URL de descarga que definimos en el backend:
-    final url =
-        '${Env.apiBaseUrl}/api/attachments/${a.id}/download';
-    final uri = Uri.parse(url);
+      final resp = await http.delete(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': widget.role,           // 'usuario', 'admin' o 'root'
+          'x-user-id': widget.userId.toString(),
+        },
+      );
 
-    if (!await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    )) {
+      if (!mounted) return;
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        setState(() {
+          _attachments.removeWhere((att) => att.id == a.id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Evidencia eliminada')),
+        );
+      } else if (resp.statusCode == 403) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No puedes eliminar esta evidencia porque la subió otro usuario.',
+            ),
+          ),
+        );
+      } else if (resp.statusCode == 404) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'La evidencia ya no existe en el servidor.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error al eliminar evidencia: ${resp.statusCode}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir la evidencia')),
+        SnackBar(
+          content: Text('Error de red al eliminar evidencia: $e'),
+        ),
       );
     }
   }
 
-  String _guessMimeType(String fileName) {
-    final ext = fileName.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'pdf':
-        return 'application/pdf';
-      case 'doc':
-      case 'docx':
-        return 'application/msword';
-      case 'xls':
-      case 'xlsx':
-        return 'application/vnd.ms-excel';
-      default:
-        return 'application/octet-stream';
-    }
-  }
-
-  // =================== LÓGICA DE ESTADO / API (estatus tarea) ===================
+  // =================== GUARDAR CAMBIOS DE ESTADO ===================
 
   Future<void> _saveChanges() async {
     setState(() => _saving = true);
 
-    // 1) Mapear TaskStatus -> código del backend
     String statusCode;
     switch (_current.status) {
       case TaskStatus.pending:
@@ -446,12 +536,10 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
 
       final resp = await http.put(
         uri,
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
-          // En dev, simulamos que es un usuario normal:
-          // TODO: reemplazar con el id real del usuario logueado
-          'x-role': 'usuario',
-          'x-user-id': '2',
+          'x-role': widget.role.toLowerCase(),
+          'x-user-id': widget.userId.toString(),
         },
         body: jsonEncode({'status': statusCode}),
       );
@@ -467,7 +555,8 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Error al guardar en el servidor: ${resp.statusCode}'),
+              'Error al guardar en el servidor: ${resp.statusCode}',
+            ),
           ),
         );
       }
@@ -515,5 +604,28 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
       'dic'
     ];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  String _guessMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+      case 'docx':
+        return 'application/msword';
+      case 'xls':
+      case 'xlsx':
+        return 'application/vnd.ms-excel';
+      default:
+        return 'application/octet-stream';
+    }
   }
 }
