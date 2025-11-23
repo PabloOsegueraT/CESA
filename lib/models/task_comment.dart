@@ -23,10 +23,12 @@ class TaskComment {
 
   factory TaskComment.fromJson(Map<String, dynamic> json) {
     final rawDate = json['createdAt'] ?? json['created_at'];
+
     DateTime dt = DateTime.now();
     if (rawDate is String && rawDate.isNotEmpty) {
       try {
-        dt = DateTime.parse(rawDate);
+        // 👇 MUY IMPORTANTE: llevar todo a hora local del dispositivo
+        dt = DateTime.parse(rawDate).toLocal();
       } catch (_) {}
     }
 
