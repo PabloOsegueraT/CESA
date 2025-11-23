@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/env.dart';
 import '../../../state/auth_controller.dart';
 import 'users_create_screen.dart';
+import 'user_detail_screen.dart';
+
+
 
 class AdminUserListItem {
   final int id;
@@ -69,6 +72,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       'x-role': roleCode,
       // NO hace falta x-user-id para listar usuarios
     };
+  }
+  void _openUserDetail(AdminUserListItem user) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminUserDetailScreen(user: user),
+      ),
+    );
   }
 
 
@@ -137,6 +147,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       position: const RelativeRect.fromLTRB(1000, 80, 16, 0),
       items: const [
         PopupMenuItem(
+          value: 'view',
+          child: ListTile(
+            leading: Icon(Icons.person_outline),
+            title: Text('Ver perfil'),
+          ),
+        ),
+        PopupMenuItem(
           value: 'password',
           child: ListTile(
             leading: Icon(Icons.vpn_key_outlined),
@@ -153,12 +170,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       ],
     );
 
-    if (value == 'password') {
+    if (value == 'view') {
+      _openUserDetail(user);
+    } else if (value == 'password') {
       _showChangePasswordSheet(user);
     } else if (value == 'delete') {
       _confirmDeleteUser(user);
     }
   }
+
 
   Future<void> _showChangePasswordSheet(AdminUserListItem user) async {
     final newPassCtrl = TextEditingController();
@@ -393,6 +413,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   leading: CircleAvatar(child: Text(initial)),
                   title: Text(u.name),
                   subtitle: Text(subtitle),
+                  onTap: () => _openUserDetail(u),
                   trailing: auth.isRoot
                       ? IconButton(
                     icon: const Icon(Icons.more_vert),
