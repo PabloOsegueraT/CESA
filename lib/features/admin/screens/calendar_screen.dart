@@ -1,9 +1,9 @@
 // lib/features/admin/screens/calendar_screen.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../models/task.dart';
-import '../../../design_system/widgets/task_card.dart';
 
 class AdminCalendarScreen extends StatefulWidget {
   final List<Task> tasks;
@@ -18,131 +18,219 @@ class AdminCalendarScreen extends StatefulWidget {
 }
 
 class _AdminCalendarScreenState extends State<AdminCalendarScreen> {
-  late Map<DateTime, List<Task>> _eventsByDay;
   late DateTime _focusedDay;
-  late DateTime _selectedDay;
-  List<Task> _selectedTasks = [];
+  DateTime? _selectedDay;
 
   @override
   void initState() {
     super.initState();
     _focusedDay = DateTime.now();
-    _selectedDay = DateTime(
-      _focusedDay.year,
-      _focusedDay.month,
-      _focusedDay.day,
-    );
-    _eventsByDay = _groupTasksByDay(widget.tasks);
-    _selectedTasks = _getTasksForDay(_selectedDay);
+    _selectedDay = DateTime(_focusedDay.year, _focusedDay.month, _focusedDay.day);
   }
 
-  // 👉 para que cuando cambie la lista _tasks en AdminShell,
-  // se actualice el calendario sin tener que cerrar y abrir la pantalla
-  @override
-  void didUpdateWidget(covariant AdminCalendarScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.tasks != widget.tasks) {
-      _eventsByDay = _groupTasksByDay(widget.tasks);
-      _selectedTasks = _getTasksForDay(_selectedDay);
-    }
-  }
-
-  Map<DateTime, List<Task>> _groupTasksByDay(List<Task> tasks) {
-    final Map<DateTime, List<Task>> data = {};
-
-    for (final t in tasks) {
-      final day = DateTime(t.dueDate.year, t.dueDate.month, t.dueDate.day);
-      data.putIfAbsent(day, () => []).add(t);
-    }
-
-    return data;
-  }
-
-  List<Task> _getTasksForDay(DateTime day) {
-    final key = DateTime(day.year, day.month, day.day);
-    return _eventsByDay[key] ?? [];
+  /// Tareas cuya fecha límite coincide con [day]
+  List<Task> _tasksForDay(DateTime day) {
+    return widget.tasks.where((t) {
+      final d = t.dueDate;
+      return d.year == day.year && d.month == day.month && d.day == day.day;
+    }).toList()
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.tasks.isEmpty) {
-      return const Center(
-        child: Text('No hay tareas registradas aún'),
-      );
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 800;
+        final date = _selectedDay ?? _focusedDay;
+        final tasksForDay = _tasksForDay(date);
 
-    return Column(
-      children: [
-        TableCalendar<Task>(
-          firstDay: DateTime.utc(2020, 1, 1),
-          lastDay: DateTime.utc(2100, 12, 31),
-          focusedDay: _focusedDay,
-          startingDayOfWeek: StartingDayOfWeek.monday,
-          calendarFormat: CalendarFormat.month,
-          selectedDayPredicate: (day) =>
-          day.year == _selectedDay.year &&
-              day.month == _selectedDay.month &&
-              day.day == _selectedDay.day,
-          eventLoader: _getTasksForDay,
-          onDaySelected: (selectedDay, focusedDay) {
-            setState(() {
-              _selectedDay = DateTime(
-                selectedDay.year,
-                selectedDay.month,
-                selectedDay.day,
-              );
-              _focusedDay = focusedDay;
-              _selectedTasks = _getTasksForDay(selectedDay);
-            });
-          },
-          headerStyle: const HeaderStyle(
-            formatButtonVisible: false,
-            titleCentered: true,
-          ),
-          calendarStyle: const CalendarStyle(
-            // 👉 Puntitos debajo de los días con tareas
-            markerDecoration: BoxDecoration(
-              color: Colors.blueAccent,   // color del puntito
-              shape: BoxShape.circle,
+        final calendarCard = Card(
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: TableCalendar<Task>(
+              locale: 'es_MX',
+              firstDay: DateTime.utc(2020, 1, 1),
+              lastDay: DateTime.utc(2035, 12, 31),
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              startingDayOfWeek: StartingDayOfWeek.monday,
+              availableGestures: AvailableGestures.horizontalSwipe,
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+              ),
+              calendarStyle: CalendarStyle(
+                markersMaxCount: 3,
+                todayDecoration: BoxDecoration(
+                  color: Colors.purpleAccent,
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: Colors.blueAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              eventLoader: _tasksForDay,
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+              },
             ),
-            markersMaxCount: 3,           // hasta 3 puntitos si hay varias tareas
-            markersAutoAligned: true,
+          ),
+        );
 
-            // Día de hoy con un borde
-            todayDecoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.fromBorderSide(
-                BorderSide(width: 2, color: Colors.blueAccent),
+        final tasksPanel = _DayTasksPanel(
+          date: date,
+          tasks: tasksForDay,
+        );
+
+        // Pantalla ancha: calendario a la izquierda, lista a la derecha
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                flex: 5,
+                child: calendarCard,
+              ),
+              Flexible(
+                flex: 6,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                  child: tasksPanel,
+                ),
+              ),
+            ],
+          );
+        }
+
+        // Pantalla chica (cel / tablet en vertical): todo en scroll vertical
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            calendarCard,
+            const SizedBox(height: 16),
+            tasksPanel,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DayTasksPanel extends StatelessWidget {
+  final DateTime date;
+  final List<Task> tasks;
+
+  const _DayTasksPanel({
+    required this.date,
+    required this.tasks,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dateStr = DateFormat('d MMM y', 'es_MX').format(date);
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // 👈 evita overflow dentro de la card
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tareas para $dateStr',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
             ),
-
-            // Día seleccionado rellenito
-            selectedDecoration: BoxDecoration(
-              color: Colors.blueAccent,
-              shape: BoxShape.circle,
+            const SizedBox(height: 4),
+            Text(
+              'Vista rápida de las tareas con fecha límite en este día.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: cs.onSurface.withOpacity(0.7),
+              ),
             ),
-            selectedTextStyle: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+            const SizedBox(height: 12),
+            if (tasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No hay tareas para este día.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: tasks.length,
+                separatorBuilder: (_, __) => const Divider(height: 8),
+                itemBuilder: (_, i) {
+                  final t = tasks[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      t.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      'Asignado a: ${t.assignee}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: _StatusChip(status: t.status),
+                    // Si luego quieres abrir el detalle:
+                    // onTap: () { ... },
+                  );
+                },
+              ),
+          ],
         ),
+      ),
+    );
+  }
+}
 
-        const SizedBox(height: 8),
-        Expanded(
-          child: _selectedTasks.isEmpty
-              ? const Center(
-            child: Text('No hay tareas para este día'),
-          )
-              : ListView.builder(
-            itemCount: _selectedTasks.length,
-            itemBuilder: (context, index) {
-              final task = _selectedTasks[index];
-              return TaskCard(task: task);
-            },
-          ),
-        ),
-      ],
+class _StatusChip extends StatelessWidget {
+  final TaskStatus status;
+
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    late final String label;
+    late final Color color;
+
+    switch (status) {
+      case TaskStatus.pending:
+        label = 'Pendiente';
+        color = Colors.orangeAccent;
+        break;
+      case TaskStatus.inProgress:
+        label = 'En proceso';
+        color = Colors.lightBlueAccent;
+        break;
+      case TaskStatus.done:
+        label = 'Completada';
+        color = Colors.greenAccent;
+        break;
+    }
+
+    return Chip(
+      label: Text(label),
+      backgroundColor: color.withOpacity(0.15),
+      labelStyle: TextStyle(color: color),
+      visualDensity: VisualDensity.compact,
     );
   }
 }

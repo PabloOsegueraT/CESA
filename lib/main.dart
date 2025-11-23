@@ -15,6 +15,9 @@ import 'features/admin/screens/users_screen.dart';
 import 'state/notifications_controller.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'state/auth_controller.dart';
+import 'features/admin/admin_shell.dart';
+import 'features/user/user_shell.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,8 +66,9 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
                     initialRoute: '/auth',
                     routes: {
                       '/auth': (_) => const LoginScreen(),
-                      '/admin': (_) => const AdminShell(),
-                      '/user': (_) => const UserShell(),
+                      '/admin': (_) => AdminShell(),
+                      '/user': (_) => UserShell(),
+
                       '/settings': (_) => const SettingsScreen(),
                       '/profile': (_) => const ProfileScreen(),
                       '/create-user': (_) => const AdminUserCreateScreen(),
