@@ -19,6 +19,13 @@ import '../../models/user_dashboard_summary.dart';
 import '../../state/profile_controller.dart';
 import '../admin/screens/fullscreen_image_screen.dart';
 import '../admin/screens/task_detail_screen.dart';
+import '../admin/screens/fullscreen_image_screen.dart';
+import 'screens/calendar_screen.dart';
+import '../../state/profile_controller.dart';
+import 'screens/progress_screen.dart';
+import '../../models/user_dashboard_summary.dart';
+import '../notifications/notifications_screen.dart';
+
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -38,7 +45,7 @@ class _UserShellState extends State<UserShell> {
 
     // Ejecutar después del primer frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadMyTasks();
+      _loadMyTasks(); // ✅ aquí ya puedes usar ScaffoldMessenger.of(context)
     });
   }
 
@@ -46,6 +53,7 @@ class _UserShellState extends State<UserShell> {
     setState(() => _loading = true);
 
     try {
+      // Obtenemos el perfil para saber el userId
       final profile = ProfileControllerProvider.maybeOf(context);
       final userId = profile?.userId;
 
@@ -66,6 +74,7 @@ class _UserShellState extends State<UserShell> {
         uri,
         headers: {
           'Content-Type': 'application/json',
+          // En este módulo el usuario es "Usuario"
           'x-role': 'usuario',
           'x-user-id': userId.toString(),
         },
@@ -1725,9 +1734,16 @@ class _UserMoreScreen extends StatelessWidget {
         title: const Text('Perfil'),
         onTap: () => Navigator.of(context).pushNamed('/profile'),
       ),
-      const ListTile(
-        leading: Icon(Icons.notifications_none),
-        title: Text('Notificaciones'),
+      ListTile(
+        leading: const Icon(Icons.notifications_none),
+        title: const Text('Notificaciones'),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const NotificationsScreen(),
+            ),
+          );
+        },
       ),
       ListTile(
         leading: const Icon(Icons.settings_outlined),
