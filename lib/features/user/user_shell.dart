@@ -21,6 +21,7 @@ import 'screens/calendar_screen.dart';
 import '../../state/profile_controller.dart';
 import 'screens/progress_screen.dart';
 import '../../models/user_dashboard_summary.dart';
+import '../notifications/notifications_screen.dart';
 
 
 class UserShell extends StatefulWidget {
@@ -1576,9 +1577,16 @@ class _UserMoreScreen extends StatelessWidget {
         title: const Text('Perfil'),
         onTap: () => Navigator.of(context).pushNamed('/profile'),
       ),
-      const ListTile(
-        leading: Icon(Icons.notifications_none),
-        title: Text('Notificaciones'),
+      ListTile(
+        leading: const Icon(Icons.notifications_none),
+        title: const Text('Notificaciones'),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const NotificationsScreen(),
+            ),
+          );
+        },
       ),
       ListTile(
         leading: const Icon(Icons.settings_outlined),
