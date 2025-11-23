@@ -683,7 +683,6 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
         ],
       ),
     );
-  }
 
   Widget _buildNewCommentField(BuildContext context) {
     return Row(
