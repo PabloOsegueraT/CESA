@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/env.dart';
 import '../../../models/task.dart';
 import '../../../models/task_attachment.dart';
+import '../../../models/task_comment.dart';
 import '../../user/screens/attachment_preview_screen.dart';
 
 class UserTaskDetailScreen extends StatefulWidget {
@@ -47,11 +48,24 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
   bool _loadingAttachments = true;
   bool _uploadingAttachment = false;
 
+  // Comentarios
+  List<TaskComment> _comments = [];
+  bool _loadingComments = true;
+  bool _sendingComment = false;
+  final TextEditingController _commentCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _current = widget.task;
     _loadAttachments();
+    _loadComments();
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
   }
 
   // ===================== UI PRINCIPAL =====================
@@ -133,11 +147,19 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
           const Divider(),
           const SizedBox(height: 12),
 
+          // Evidencias
           _buildAttachmentsSection(context),
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+
+          // Comentarios
+          _buildCommentsSection(context),
 
           const SizedBox(height: 16),
 
-          // Acciones
+          // Acciones (subir evidencia + guardar estado)
           Row(
             children: [
               Expanded(
@@ -463,7 +485,7 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          'x-role': widget.role,           // 'usuario', 'admin' o 'root'
+          'x-role': widget.role.toLowerCase(),
           'x-user-id': widget.userId.toString(),
         },
       );
@@ -511,6 +533,461 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
       );
     }
   }
+
+  // =================== SECCIÓN DE COMENTARIOS ===================
+
+  // =================== SECCIÓN VISUAL DE COMENTARIOS ===================
+
+  Widget _buildCommentsSection(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Comentarios',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+
+        if (_loadingComments)
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else if (_comments.isEmpty)
+          Text(
+            'Aún no hay comentarios en esta tarea.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+          )
+        else
+          Column(
+            children: _comments
+                .map((c) => _buildCommentTile(context, c))
+                .toList(),
+          ),
+
+        const SizedBox(height: 12),
+        _buildNewCommentField(context),
+      ],
+    );
+  }
+
+  Widget _buildCommentTile(BuildContext context, TaskComment c) {
+    final theme = Theme.of(context);
+    final isMine = c.isMine;
+    final isAdmin = c.isAdmin;
+
+    final bubbleColor = isMine
+        ? theme.colorScheme.primary.withOpacity(0.08)
+        : theme.colorScheme.surfaceVariant;
+    final align =
+    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: align,
+        children: [
+          Row(
+            mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              if (!isMine)
+                CircleAvatar(
+                  radius: 14,
+                  child: Text(
+                    c.author.isNotEmpty ? c.author[0].toUpperCase() : '?',
+                  ),
+                ),
+              if (!isMine) const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bubbleColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isMine ? 'Tú' : c.author,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          if (isAdmin) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: theme.colorScheme.primary,
+                                  width: 0.7,
+                                ),
+                              ),
+                              child: Text(
+                                'Admin',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        c.body,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatCommentDate(c.createdAt),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface
+                              .withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (isMine) const SizedBox(width: 8),
+              if (isMine)
+                CircleAvatar(
+                  radius: 14,
+                  child: Text(
+                    c.author.isNotEmpty ? c.author[0].toUpperCase() : '?',
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewCommentField(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _commentCtrl,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Escribe un comentario...',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          onPressed: _sendingComment ? null : _sendComment,
+          icon: _sendingComment
+              ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+              : const Icon(Icons.send_rounded),
+        ),
+      ],
+    );
+  }
+
+  String _formatCommentDate(DateTime d) {
+    final now = DateTime.now();
+    final sameDay =
+        d.year == now.year && d.month == now.month && d.day == now.day;
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+
+    if (sameDay) {
+      return 'Hoy $hh:$mm';
+    }
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} $hh:$mm';
+  }
+
+  Widget _buildCommentsGrouped(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Separamos por rol
+    final adminComments = _comments.where((c) {
+      final r = c.role.toLowerCase();
+      return r == 'admin' || r == 'root';
+    }).toList();
+
+    final userComments = _comments.where((c) {
+      final r = c.role.toLowerCase();
+      return !(r == 'admin' || r == 'root');
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (adminComments.isNotEmpty) ...[
+          Text(
+            'Comentarios del equipo (admin / root)',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...adminComments.map((c) => _buildCommentBubble(context, c)),
+          const SizedBox(height: 16),
+        ],
+        if (userComments.isNotEmpty) ...[
+          Text(
+            'Comentarios de usuarios',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...userComments.map((c) => _buildCommentBubble(context, c)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCommentBubble(BuildContext context, TaskComment c) {
+    final theme = Theme.of(context);
+    final isMine = c.userId == widget.userId;
+    final r = c.role.toLowerCase();
+    final isAdminOrRoot = r == 'admin' || r == 'root';
+
+    final bgColor = isMine
+        ? theme.colorScheme.primary
+        : isAdminOrRoot
+        ? theme.colorScheme.surfaceVariant
+        : theme.colorScheme.surface;
+
+    final textColor = isMine
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurface;
+
+    final align =
+    isMine ? Alignment.centerRight : Alignment.centerLeft;
+
+    final authorAndRole = '${c.author} (${_roleLabel(c.role)})';
+
+    return Align(
+      alignment: align,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 320),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft:
+              isMine ? const Radius.circular(16) : const Radius.circular(4),
+              bottomRight:
+              isMine ? const Radius.circular(4) : const Radius.circular(16),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment:
+            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: isMine
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
+                children: [
+                  if (!isMine) ...[
+                    CircleAvatar(
+                      radius: 12,
+                      child: Text(
+                        c.author.isNotEmpty
+                            ? c.author[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      authorAndRole,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                c.body,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDateTime(c.createdAt),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: textColor.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _roleLabel(String rawRole) {
+    final r = rawRole.toLowerCase();
+    if (r == 'admin') return 'Admin';
+    if (r == 'root') return 'Root';
+    return 'Usuario';
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final d = dt;
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    final year = d.year;
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hh:$mm';
+  }
+
+  // =================== LÓGICA: COMENTARIOS ===================
+
+  Future<void> _loadComments() async {
+    setState(() => _loadingComments = true);
+
+    try {
+      final uri =
+      Uri.parse('${Env.apiBaseUrl}/api/tasks/${_current.id}/comments');
+
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': widget.role.toLowerCase(),
+          'x-user-id': widget.userId.toString(),
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['comments'] as List<dynamic>? ?? [])
+            .map((e) => TaskComment.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        if (!mounted) return;
+        setState(() {
+          _comments = list;
+          _loadingComments = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() => _loadingComments = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+            Text('Error al cargar comentarios: ${resp.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingComments = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de red al cargar comentarios: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _sendComment() async {
+    final text = _commentCtrl.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escribe un comentario primero')),
+      );
+      return;
+    }
+
+    setState(() => _sendingComment = true);
+
+    try {
+      final uri =
+      Uri.parse('${Env.apiBaseUrl}/api/tasks/${_current.id}/comments');
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': widget.role.toLowerCase(),
+          'x-user-id': widget.userId.toString(),
+        },
+        body: jsonEncode({'body': text}),
+      );
+
+      if (!mounted) return;
+
+      if (resp.statusCode == 201) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final comment = TaskComment.fromJson(data);
+
+        setState(() {
+          _comments.add(comment);
+          _sendingComment = false;
+          _commentCtrl.clear();
+        });
+      } else {
+        setState(() => _sendingComment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error al enviar comentario: ${resp.statusCode}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingComment = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de red al enviar comentario: $e'),
+        ),
+      );
+    }
+  }
+
+
 
   // =================== GUARDAR CAMBIOS DE ESTADO ===================
 
@@ -628,4 +1105,5 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
         return 'application/octet-stream';
     }
   }
+
 }
