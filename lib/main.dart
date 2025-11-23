@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
 import 'design_system/theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/admin/admin_shell.dart';
@@ -14,64 +16,69 @@ import 'state/notifications_controller.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'state/auth_controller.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar datos de fechas para español (México)
+  await initializeDateFormatting('es_MX', null);
+
   runApp(const TaskManagerApp());
 }
 
 class TaskManagerApp extends StatefulWidget {
   const TaskManagerApp({super.key}); // a.k.a MyApp para tests
+
   @override
   State<TaskManagerApp> createState() => _TaskManagerAppState();
 }
 
 class _TaskManagerAppState extends State<TaskManagerApp> {
   final ThemeController _theme = ThemeController();
-  final ProfileController _profile = ProfileController(); // <-- NUEVO
-  final UsersController _users = UsersController(); // NUEVO
+  final ProfileController _profile = ProfileController();
+  final UsersController _users = UsersController();
   final NotificationsController _notifications = NotificationsController();
   final AuthController _auth = AuthController();
-
 
   @override
   Widget build(BuildContext context) {
     return ThemeControllerProvider(
       controller: _theme,
-      child: ProfileControllerProvider( // <- ENVUELVE A MaterialApp
+      child: ProfileControllerProvider(
         controller: _profile,
-        child: UsersControllerProvider(                       // <-- ENVUELVE AQUÍ
+        child: UsersControllerProvider(
           controller: _users,
-          child: NotificationsControllerProvider(          // ← NUEVO
+          child: NotificationsControllerProvider(
             controller: _notifications,
             child: AuthControllerProvider(
               controller: _auth,
-        child: AnimatedBuilder(
-          animation: _theme,
-          builder: (context, _) {
-            return MaterialApp(
-              title: 'Task Manager',
-              theme: AppTheme.light,
-              darkTheme: AppTheme.dark,
-              themeMode: _theme.mode,
-              debugShowCheckedModeBanner: false,
-              initialRoute: '/auth',
-              routes: {
-                '/auth': (_) => const LoginScreen(),
-                '/admin': (_) => const AdminShell(),
-                '/user': (_) => const UserShell(),
-                '/settings': (_) => const SettingsScreen(),
-                '/profile': (_) => const ProfileScreen(),
-                '/create-user': (_) => const AdminUserCreateScreen(),
-                '/admin-users': (_) => const AdminUsersScreen(),
-                '/notifications': (_) => const NotificationsScreen(),
-              },
-            );
-          },
+              child: AnimatedBuilder(
+                animation: _theme,
+                builder: (context, _) {
+                  return MaterialApp(
+                    title: 'Task Manager',
+                    theme: AppTheme.light,
+                    darkTheme: AppTheme.dark,
+                    themeMode: _theme.mode,
+                    debugShowCheckedModeBanner: false,
+                    initialRoute: '/auth',
+                    routes: {
+                      '/auth': (_) => const LoginScreen(),
+                      '/admin': (_) => const AdminShell(),
+                      '/user': (_) => const UserShell(),
+                      '/settings': (_) => const SettingsScreen(),
+                      '/profile': (_) => const ProfileScreen(),
+                      '/create-user': (_) => const AdminUserCreateScreen(),
+                      '/admin-users': (_) => const AdminUsersScreen(),
+                      '/notifications': (_) =>
+                      const NotificationsScreen(),
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
         ),
       ),
-    )
-    )
-    )
     );
   }
 }
-

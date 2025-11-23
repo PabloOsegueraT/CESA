@@ -19,6 +19,9 @@ import '../admin/screens/task_detail_screen.dart';
 import '../admin/screens/fullscreen_image_screen.dart';
 import 'screens/calendar_screen.dart';
 import '../../state/profile_controller.dart';
+import 'screens/progress_screen.dart';
+import '../../models/user_dashboard_summary.dart';
+
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -229,8 +232,9 @@ class _UserTasksListState extends State<_UserTasksList> {
                 task: widget.tasks[i],
                 role: 'usuario',
                 userId: userId,
-                canManageTask: false,        // el usuario no edita meta de la tarea
-                canDeleteAttachments: true,  // pero SÍ puede borrar sus evidencias
+                canManageTask: false, // el usuario no edita meta de la tarea
+                canDeleteAttachments:
+                true, // pero SÍ puede borrar sus evidencias
               ),
             ),
           );
@@ -435,7 +439,8 @@ class _UserForumDetailScreen extends StatefulWidget {
   const _UserForumDetailScreen({required this.forum});
 
   @override
-  State<_UserForumDetailScreen> createState() => _UserForumDetailScreenState();
+  State<_UserForumDetailScreen> createState() =>
+      _UserForumDetailScreenState();
 }
 
 class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
@@ -862,7 +867,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                      CrossAxisAlignment.start,
                       children: [
                         Text(
                           msg.author,
@@ -1024,92 +1030,438 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
 }
 
 /* ============================
- *  PROGRESO (igual que antes)
+ *  PROGRESO – USUARIO
  * ========================== */
 
-class _UserProgressScreen extends StatelessWidget {
+class _UserProgressScreen extends StatefulWidget {
   const _UserProgressScreen();
 
   @override
+  State<_UserProgressScreen> createState() => _UserProgressScreenState();
+}
+
+class _UserProgressScreenState extends State<_UserProgressScreen> {
+  bool _loading = true;
+  String? _error;
+  UserDashboardSummary? _summary;
+
+  late int _selectedYear;
+  late int _selectedMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedYear = now.year;
+    _selectedMonth = now.month;
+
+    // Cargar después del primer frame para tener context válido
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSummary();
+    });
+  }
+
+  Future<void> _loadSummary() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final profile = ProfileControllerProvider.maybeOf(context);
+      final userId = profile?.userId;
+
+      if (userId == null || userId <= 0) {
+        setState(() {
+          _loading = false;
+          _error = 'No se encontró el usuario en sesión.';
+        });
+        return;
+      }
+
+      final uri = Uri.parse(
+        '${Env.apiBaseUrl}/api/dashboard/my-summary'
+            '?year=$_selectedYear&month=$_selectedMonth',
+      );
+
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'usuario',
+          'x-user-id': userId.toString(),
+        },
+      );
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final s = UserDashboardSummary.fromJson(data);
+
+        setState(() {
+          _summary = s;
+          _loading = false;
+          _error = null;
+        });
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'Error HTTP ${resp.statusCode} al cargar datos.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Error de red: $e';
+      });
+    }
+  }
+
+  void _changeMonth(int delta) {
+    var year = _selectedYear;
+    var month = _selectedMonth + delta;
+    if (month <= 0) {
+      month = 12;
+      year -= 1;
+    } else if (month >= 13) {
+      month = 1;
+      year += 1;
+    }
+    setState(() {
+      _selectedYear = year;
+      _selectedMonth = month;
+    });
+    _loadSummary();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Por ahora valores demo; luego puedes sustituirlos
-    // por datos reales calculados a partir de las tareas.
-    final double weeklyProgress = 0.72; // 72%
-    final double monthlyProgress = 0.65; // 65%
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final isSmall = constraints.maxWidth < 600;
+        final monthName = DateFormat.yMMMM('es_MX')
+            .format(DateTime(_selectedYear, _selectedMonth, 1));
 
-    // Ejemplo de datos para la gráfica (progreso diario en %)
-    final List<double> dailyProgress = [20, 40, 60, 55, 72, 80, 90];
-    final List<String> dayLabels = [
-      'Lun',
-      'Mar',
-      'Mié',
-      'Jue',
-      'Vie',
-      'Sáb',
-      'Dom'
-    ];
+        final summary = _summary;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+        return RefreshIndicator(
+          onRefresh: _loadSummary,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Header de mes + flechas
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    onPressed: _loading ? null : () => _changeMonth(-1),
+                    icon: const Icon(Icons.chevron_left),
+                    tooltip: 'Mes anterior',
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        'Mi progreso',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        monthName,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: _loading ? null : () => _changeMonth(1),
+                    icon: const Icon(Icons.chevron_right),
+                    tooltip: 'Mes siguiente',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_error != null)
+                Card(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onErrorContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (summary == null || !summary.hasTasks)
+                  Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.inbox_outlined,
+                            size: 40,
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Aún no tienes tareas registradas en este periodo.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else ...[
+                    // === Tarjetas con íconos (responsive) ===
+                    _buildStatsCards(context, summary, isSmall, constraints),
+                    const SizedBox(height: 24),
+
+                    Text(
+                      'Progreso por estado',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _UserProgressChart(
+                      points: [
+                        summary.pending.toDouble(),
+                        summary.inProgress.toDouble(),
+                        summary.done.toDouble(),
+                      ],
+                      labels: const ['Pend.', 'En proc.', 'Hechas'],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    Text(
+                      'Prioridad de mis tareas',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildPriorityRow(context, summary),
+                  ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatsCards(
+      BuildContext context,
+      UserDashboardSummary summary,
+      bool isSmall,
+      BoxConstraints constraints,
+      ) {
+    final double fullWidth = constraints.maxWidth;
+    final double cardWidth =
+    isSmall ? fullWidth : (fullWidth - 16) / 2; // 2 por fila en pantallas grandes
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: [
-        _ProgressCard(
-          title: 'Semanal',
-          progress: weeklyProgress,
-        ),
-        const SizedBox(height: 16),
-        _ProgressCard(
-          title: 'Mensual',
-          progress: monthlyProgress,
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Mi gráfica de progreso',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
+        SizedBox(
+          width: cardWidth,
+          child: _StatCard(
+            icon: Icons.assignment_outlined,
+            iconColor: Theme.of(context).colorScheme.primary,
+            title: 'Total tareas',
+            value: summary.total.toString(),
+            subtitle: 'Asignadas en el mes',
           ),
         ),
-        const SizedBox(height: 12),
-        _UserProgressChart(
-          points: dailyProgress,
-          labels: dayLabels,
+        SizedBox(
+          width: cardWidth,
+          child: _StatCard(
+            icon: Icons.pending_actions_outlined,
+            iconColor: Colors.orange,
+            title: 'Pendientes',
+            value: summary.pending.toString(),
+            subtitle:
+            '${(summary.pendingPercent * 100).toStringAsFixed(0)}% del total',
+          ),
         ),
+        SizedBox(
+          width: cardWidth,
+          child: _StatCard(
+            icon: Icons.play_circle_outline,
+            iconColor: Colors.blue,
+            title: 'En proceso',
+            value: summary.inProgress.toString(),
+            subtitle:
+            '${(summary.inProgressPercent * 100).toStringAsFixed(0)}% del total',
+          ),
+        ),
+        SizedBox(
+          width: cardWidth,
+          child: _StatCard(
+            icon: Icons.check_circle_outline,
+            iconColor: Colors.green,
+            title: 'Completadas',
+            value: summary.done.toString(),
+            subtitle:
+            '${(summary.donePercent * 100).toStringAsFixed(0)}% del total',
+          ),
+        ),
+        SizedBox(
+          width: cardWidth,
+          child: _StatCard(
+            icon: Icons.access_time,
+            iconColor: Colors.redAccent,
+            title: 'Vencen en 48h',
+            value: summary.dueSoon48h.toString(),
+            subtitle: 'Tareas próximas a vencer',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriorityRow(
+      BuildContext context,
+      UserDashboardSummary summary,
+      ) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget pill(String label, int count, Color color) {
+      return Chip(
+        avatar: CircleAvatar(
+          backgroundColor: color,
+          radius: 8,
+        ),
+        label: Text('$label: $count'),
+        backgroundColor: cs.surfaceVariant.withOpacity(0.6),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        pill('Baja', summary.low, Colors.green),
+        pill('Media', summary.medium, Colors.orange),
+        pill('Alta', summary.high, Colors.red),
       ],
     );
   }
 }
 
-class _ProgressCard extends StatelessWidget {
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
   final String title;
-  final double progress; // 0.0–1.0
+  final String value;
+  final String subtitle;
 
-  const _ProgressCard({
+  const _StatCard({
+    required this.icon,
+    required this.iconColor,
     required this.title,
-    required this.progress,
+    required this.value,
+    required this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final percentage = (progress * 100).toStringAsFixed(0);
+    final cs = Theme.of(context).colorScheme;
 
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      elevation: 4,
-      child: SizedBox(
-        height: 120,
-        child: Center(
-          child: Text(
-            '$title: $percentage%',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Gráfica individual de progreso del usuario
+/// Gráfica de progreso del usuario (usa fl_chart)
 class _UserProgressChart extends StatelessWidget {
-  final List<double> points; // valores 0-100
+  final List<double> points; // valores 0-100 (en este caso, conteos)
   final List<String> labels; // etiquetas eje X
 
   const _UserProgressChart({
@@ -1133,21 +1485,21 @@ class _UserProgressChart extends StatelessWidget {
               minX: 0,
               maxX: (points.length - 1).toDouble(),
               minY: 0,
-              maxY: 100,
+              maxY: (points.fold<double>(0, (m, v) => v > m ? v : m) + 1)
+                  .clamp(1, double.infinity),
               gridData: FlGridData(
                 show: true,
-                horizontalInterval: 20,
-                verticalInterval: 1,
+                horizontalInterval: 1,
               ),
               titlesData: FlTitlesData(
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 32,
-                    interval: 20,
+                    reservedSize: 30,
+                    interval: 1,
                     getTitlesWidget: (value, meta) {
                       return Text(
-                        '${value.toInt()}%',
+                        value.toInt().toString(),
                         style: Theme.of(context).textTheme.bodySmall,
                       );
                     },

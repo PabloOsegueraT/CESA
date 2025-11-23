@@ -101,8 +101,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<Map<String, String>> _buildHeaders() async {
     final auth = AuthControllerProvider.of(context);
-
-    // 👇 Forzamos el código correcto para el backend
     final roleCode = auth.isRoot ? 'root' : 'admin';
 
     return {
@@ -265,95 +263,112 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmall = constraints.maxWidth < 600;
+        final cardsPerRow = isSmall ? 1 : 2;
+        final spacing = 12.0;
+        final cardWidth =
+            (constraints.maxWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _MetricCard(
-              title: 'Tareas totales',
-              value: s.total,
-              color: colorScheme.primary,
-              icon: Icons.view_list_outlined,
-            ),
-            _MetricCard(
-              title: 'Pendientes',
-              value: s.pending,
-              color: Colors.orangeAccent,
-              icon: Icons.pending_actions_outlined,
-            ),
-            _MetricCard(
-              title: 'En proceso',
-              value: s.inProgress,
-              color: Colors.lightBlueAccent,
-              icon: Icons.autorenew_outlined,
-            ),
-            _MetricCard(
-              title: 'Completadas',
-              value: s.done,
-              color: Colors.greenAccent,
-              icon: Icons.check_circle_outline,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (s.dueSoon48h > 0)
-          Card(
-            color: Colors.amber.withOpacity(0.12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: Colors.amber.withOpacity(0.8),
-                width: 1.2,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${s.dueSoon48h} tareas vencen en las próximas 48 horas.',
-                    ),
+            // -------- TARJETAS DE MÉTRICAS --------
+            Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                SizedBox(
+                  width: cardWidth,
+                  child: _MetricCard(
+                    title: 'Tareas totales',
+                    value: s.total,
+                    color: colorScheme.primary,
+                    icon: Icons.view_list_outlined,
                   ),
-                ],
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _MetricCard(
+                    title: 'Pendientes',
+                    value: s.pending,
+                    color: Colors.orangeAccent,
+                    icon: Icons.pending_actions_outlined,
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _MetricCard(
+                    title: 'En proceso',
+                    value: s.inProgress,
+                    color: Colors.lightBlueAccent,
+                    icon: Icons.autorenew_outlined,
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _MetricCard(
+                    title: 'Completadas',
+                    value: s.done,
+                    color: Colors.greenAccent,
+                    icon: Icons.check_circle_outline,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            if (s.dueSoon48h > 0)
+              Card(
+                color: Colors.amber.withOpacity(0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Colors.amber.withOpacity(0.8),
+                    width: 1.2,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '${s.dueSoon48h} tareas vencen en las próximas 48 horas.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
+
+            if (s.dueSoon48h > 0) const SizedBox(height: 16),
+
+            // -------- GRÁFICA ESTADOS --------
+            _DashboardChartCard(
+              height: isSmall ? 260 : 280,
+              child: _buildStatusChart(context, s, isSmall),
             ),
-          ),
-        if (s.dueSoon48h > 0) const SizedBox(height: 16),
-        Card(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              height: 260,
-              child: _buildStatusChart(s),
+            const SizedBox(height: 16),
+
+            // -------- GRÁFICA PRIORIDADES --------
+            _DashboardChartCard(
+              height: isSmall ? 260 : 280,
+              child: _buildPriorityChart(context, s, isSmall),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              height: 260,
-              child: _buildPriorityChart(s),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+            const SizedBox(height: 24),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildStatusChart(DashboardSummary s) {
+  Widget _buildStatusChart(
+      BuildContext context, DashboardSummary s, bool isSmall) {
     final total = s.pending + s.inProgress + s.done;
     if (total == 0) {
       return const Center(
@@ -361,35 +376,60 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
 
-    final sections = <PieChartSectionData>[
-      if (s.pending > 0)
+    final radius = isSmall ? 55.0 : 70.0;
+    final fontSize = isSmall ? 12.0 : 14.0;
+
+    List<PieChartSectionData> sections = [];
+
+    if (s.pending > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.pending.toDouble(),
           title: '${s.pending}',
-          radius: 70,
+          radius: radius,
           color: Colors.orangeAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          // un poco hacia afuera para que no se junten tanto
+          titlePositionPercentageOffset: 0.7,
         ),
-      if (s.inProgress > 0)
+      );
+    }
+    if (s.inProgress > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.inProgress.toDouble(),
           title: '${s.inProgress}',
-          radius: 70,
+          radius: radius,
           color: Colors.lightBlueAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          titlePositionPercentageOffset: 0.7,
         ),
-      if (s.done > 0)
+      );
+    }
+    if (s.done > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.done.toDouble(),
           title: '${s.done}',
-          radius: 70,
+          radius: radius,
           color: Colors.greenAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          titlePositionPercentageOffset: 0.7,
         ),
-    ];
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -409,7 +449,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             PieChartData(
               sections: sections,
               sectionsSpace: 4,
-              centerSpaceRadius: 40,
+              centerSpaceRadius: isSmall ? 45 : 40,
             ),
           ),
         ),
@@ -427,7 +467,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildPriorityChart(DashboardSummary s) {
+  Widget _buildPriorityChart(
+      BuildContext context, DashboardSummary s, bool isSmall) {
     final total = s.low + s.medium + s.high;
     if (total == 0) {
       return const Center(
@@ -435,35 +476,59 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
 
-    final sections = <PieChartSectionData>[
-      if (s.low > 0)
+    final radius = isSmall ? 55.0 : 70.0;
+    final fontSize = isSmall ? 12.0 : 14.0;
+
+    List<PieChartSectionData> sections = [];
+
+    if (s.low > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.low.toDouble(),
           title: '${s.low}',
-          radius: 70,
+          radius: radius,
           color: Colors.tealAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          titlePositionPercentageOffset: 0.7,
         ),
-      if (s.medium > 0)
+      );
+    }
+    if (s.medium > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.medium.toDouble(),
           title: '${s.medium}',
-          radius: 70,
+          radius: radius,
           color: Colors.deepPurpleAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          titlePositionPercentageOffset: 0.7,
         ),
-      if (s.high > 0)
+      );
+    }
+    if (s.high > 0) {
+      sections.add(
         PieChartSectionData(
           value: s.high.toDouble(),
           title: '${s.high}',
-          radius: 70,
+          radius: radius,
           color: Colors.redAccent,
-          titleStyle:
-          const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          titlePositionPercentageOffset: 0.7,
         ),
-    ];
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -483,7 +548,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             PieChartData(
               sections: sections,
               sectionsSpace: 4,
-              centerSpaceRadius: 40,
+              centerSpaceRadius: isSmall ? 45 : 40,
             ),
           ),
         ),
@@ -498,6 +563,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         )
       ],
+    );
+  }
+}
+
+class _DashboardChartCard extends StatelessWidget {
+  final double height;
+  final Widget child;
+
+  const _DashboardChartCard({
+    required this.height,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: height,
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -519,54 +608,51 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return SizedBox(
-      width: 180,
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color.withOpacity(0.18),
-                color.withOpacity(0.02),
-              ],
-            ),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: color.withOpacity(0.2),
-                child: Icon(icon, color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$value',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              )
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withOpacity(0.18),
+              color.withOpacity(0.02),
             ],
           ),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: color.withOpacity(0.2),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$value',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ],
         ),
       ),
     );
