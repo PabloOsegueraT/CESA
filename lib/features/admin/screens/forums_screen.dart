@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/env.dart'; // donde tienes Env.apiBaseUrl
 import '../../../state/profile_controller.dart'; // 👈 NUEVO
+import 'package:http_parser/http_parser.dart';
+
 
 // Al tope del archivo, después de los imports:
 enum AudienceMode { all, selected }
