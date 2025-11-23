@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../../models/app_notification.dart';
 import '../../state/notifications_controller.dart';
+import '../../state/profile_controller.dart';
+import 'notification_detail_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -10,6 +13,7 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   NotificationKind? _kind; // null = todos
+
   // Filtro por eventos de actividad
   final Set<ActivityEvent> _activityFilter = {
     ActivityEvent.created,
@@ -19,15 +23,51 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ActivityEvent.failed,
   };
 
+  // Info del usuario logueado
+  int _userId = 0;
+  String _role = '';
+
+  // Para detectar cambios de sesión (root -> admin, etc.)
+  int? _lastUserId;
+  String? _lastRole;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final userId = profile?.userId ?? 0;
+    // Usa el código o label que tengas, pero en minúsculas
+    final role = (profile?.roleLabel ?? '').toLowerCase();
+
+    if (userId <= 0) return;
+
+    // ⚠️ Si cambió el usuario o el rol, recargamos notificaciones desde el backend
+    if (userId != _lastUserId || role != _lastRole) {
+      _userId = userId;
+      _role = role;
+      _lastUserId = userId;
+      _lastRole = role;
+
+      final ctrl = NotificationsControllerProvider.of(context);
+      ctrl.loadFromBackend(userId: userId, role: role);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ctrl = NotificationsControllerProvider.of(context);
+
     return AnimatedBuilder(
       animation: ctrl,
       builder: (context, _) {
         final all = ctrl.items;
+
         final filtered = all.where((n) {
+          // filtro por tipo
           if (_kind != null && n.kind != _kind) return false;
+
+          // filtro por evento de actividad
           if (n.kind == NotificationKind.activity && n.activityEvent != null) {
             return _activityFilter.contains(n.activityEvent!);
           }
@@ -40,7 +80,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             actions: [
               if (ctrl.unreadCount > 0)
                 TextButton(
-                  onPressed: ctrl.markAllRead,
+                  onPressed: () {
+                    if (_userId <= 0) return;
+                    ctrl.markAllReadRemote(userId: _userId, role: _role);
+                  },
                   child: const Text('Marcar todo leído'),
                 ),
               const SizedBox(width: 4),
@@ -48,66 +91,133 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           body: Column(
             children: [
-              // Segmentos por tipo
+              // ===== Fila de filtros responsiva =====
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: SegmentedButton<NotificationKind?>(
-                  segments: const [
-                    ButtonSegment(value: null, label: Text('Todas'), icon: Icon(Icons.all_inbox_outlined)),
-                    ButtonSegment(value: NotificationKind.activity, label: Text('Actividad'), icon: Icon(Icons.checklist_outlined)),
-                    ButtonSegment(value: NotificationKind.passwordReset, label: Text('Contraseña'), icon: Icon(Icons.key_outlined)),
-                    ButtonSegment(value: NotificationKind.forum, label: Text('Foros'), icon: Icon(Icons.forum_outlined)),
-                  ],
-                  selected: {_kind},
-                  onSelectionChanged: (s) => setState(() => _kind = s.first),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double w = constraints.maxWidth;
+                    final bool compact = w < 360;
+
+                    // Construimos segmentos según el rol:
+                    final segments = <ButtonSegment<NotificationKind?>>[
+                      ButtonSegment(
+                        value: null,
+                        label: Text(compact ? 'Todas' : 'Todas'),
+                        icon: const Icon(Icons.all_inbox_outlined),
+                      ),
+                      ButtonSegment(
+                        value: NotificationKind.activity,
+                        label:
+                        Text(compact ? 'Actividad' : 'Actividad'),
+                        icon:
+                        const Icon(Icons.checklist_outlined),
+                      ),
+                    ];
+
+                    // Solo el root ve el filtro de contraseña
+                    if (_role == 'root') {
+                      segments.add(
+                        ButtonSegment(
+                          value: NotificationKind.passwordReset,
+                          label: Text(compact ? 'Pass' : 'Contraseña'),
+                          icon: const Icon(Icons.key_outlined),
+                        ),
+                      );
+                    }
+
+                    segments.add(
+                      ButtonSegment(
+                        value: NotificationKind.forum,
+                        label: Text(compact ? 'Foros' : 'Foros'),
+                        icon: const Icon(Icons.forum_outlined),
+                      ),
+                    );
+
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints:
+                        BoxConstraints(minWidth: compact ? w : 0),
+                        child: SegmentedButton<NotificationKind?>(
+                          segments: segments,
+                          selected: {_kind},
+                          onSelectionChanged: (s) =>
+                              setState(() => _kind = s.first),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
 
               // Chips de eventos (solo cuando es Actividad)
               if (_kind == NotificationKind.activity)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  padding:
+                  const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Wrap(
                     spacing: 8,
                     children: [
                       _chipEvent(ActivityEvent.created, 'Creada'),
                       _chipEvent(ActivityEvent.overdue, 'Vencida'),
-                      _chipEvent(ActivityEvent.inProgress, 'En proceso'),
+                      _chipEvent(
+                          ActivityEvent.inProgress, 'En proceso'),
                       _chipEvent(ActivityEvent.done, 'Terminada'),
-                      _chipEvent(ActivityEvent.failed, 'No lograda'),
+                      _chipEvent(
+                          ActivityEvent.failed, 'No lograda'),
                     ],
                   ),
                 ),
 
               const SizedBox(height: 8),
+
               Expanded(
-                child: filtered.isEmpty
-                    ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'No tienes notificaciones con los filtros actuales',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(.7),
-                      ),
-                    ),
-                  ),
-                )
-                    : ListView.separated(
-                  padding: const EdgeInsets.only(top: 8, bottom: 12),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(height: 0),
-                  itemBuilder: (_, i) => _NotificationTile(
-                    n: filtered[i],
-                    onTap: () => ctrl.markRead(filtered[i].id),
-                  ),
-                ),
+                child: _buildBody(context, ctrl, filtered),
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildBody(
+      BuildContext context,
+      NotificationsController ctrl,
+      List<AppNotification> filtered,
+      ) {
+    // Estado de carga
+    if (ctrl.isLoading && !ctrl.loadedOnce) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'No tienes notificaciones con los filtros actuales',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withOpacity(.7),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: 8, bottom: 12),
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const Divider(height: 0),
+      itemBuilder: (_, i) => _NotificationTile(
+        n: filtered[i],
+        onTap: () {}, // ya no se usa, pero lo dejamos por firma
+      ),
     );
   }
 
@@ -138,25 +248,37 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final icon = switch (n.kind) {
       NotificationKind.activity => switch (n.activityEvent) {
-        ActivityEvent.created    => Icons.add_task,
-        ActivityEvent.overdue    => Icons.warning_amber_outlined,
-        ActivityEvent.inProgress => Icons.play_circle_outline,
-        ActivityEvent.done       => Icons.task_alt,
-        ActivityEvent.failed     => Icons.block_outlined,
-        _                        => Icons.checklist_outlined,
+        ActivityEvent.created =>
+        Icons.add_task,
+        ActivityEvent.overdue =>
+        Icons.warning_amber_outlined,
+        ActivityEvent.inProgress =>
+        Icons.play_circle_outline,
+        ActivityEvent.done =>
+        Icons.task_alt,
+        ActivityEvent.failed =>
+        Icons.block_outlined,
+        _ => Icons.checklist_outlined,
       },
       NotificationKind.passwordReset => Icons.key_outlined,
-      NotificationKind.forum         => Icons.forum_outlined,
+      NotificationKind.forum => Icons.forum_outlined,
     };
 
     final color = Theme.of(context).colorScheme;
     final unreadDot = !n.read
-        ? Container(width: 8, height: 8, decoration: BoxDecoration(color: color.primary, shape: BoxShape.circle))
+        ? Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: color.primary,
+        shape: BoxShape.circle,
+      ),
+    )
         : const SizedBox(width: 8, height: 8);
 
     return ListTile(
       leading: Badge(
-        isLabelVisible: !n.read, // globo: sólo si no leído
+        isLabelVisible: !n.read,
         label: const Text(''),
         child: CircleAvatar(
           backgroundColor: color.primaryContainer,
@@ -164,7 +286,10 @@ class _NotificationTile extends StatelessWidget {
           child: Icon(icon),
         ),
       ),
-      title: Text(n.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      title: Text(
+        n.title,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
       subtitle: Text(
         n.body,
         maxLines: 2,
@@ -173,13 +298,27 @@ class _NotificationTile extends StatelessWidget {
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(_timeAgo(n.createdAt),
-              style: TextStyle(fontSize: 12, color: color.onSurface.withOpacity(.6))),
+          Text(
+            _timeAgo(n.createdAt),
+            style: TextStyle(
+              fontSize: 12,
+              color: color.onSurface.withOpacity(.6),
+            ),
+          ),
           const SizedBox(height: 6),
           unreadDot,
         ],
       ),
-      onTap: onTap,
+      onTap: () {
+        // Navegar a la pantalla de detalle
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                NotificationDetailScreen(notification: n),
+          ),
+        );
+        // El markRead se hace dentro de NotificationDetailScreen
+      },
     );
   }
 

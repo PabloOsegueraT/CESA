@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';                    // 👈 para jsonEncode
+import 'package:http/http.dart' as http; // 👈 para http.post
+
+import '../../core/constants/env.dart';  // 👈 donde está Env.apiBaseUrl
 import '../../state/auth_controller.dart';
 import '../../state/profile_controller.dart';
 import '../../data/services/auth_api.dart';
@@ -217,10 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Text(
                   'Recuperar contraseña',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -250,10 +251,44 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
-                    // Aquí podrías llamar a POST /auth/forgot con emailCtrl.text.trim()
-                    Navigator.pop(ctx, true);
+
+                    final email = emailCtrl.text.trim();
+
+                    try {
+                      // 👇 AQUÍ LLAMAMOS A LA API REAL
+                      final uri = Uri.parse('${Env.apiBaseUrl}/api/auth/forgot');
+                      final resp = await http.post(
+                        uri,
+                        headers: const {
+                          'Content-Type': 'application/json',
+                        },
+                        body: jsonEncode({'email': email}),
+                      );
+
+                      if (resp.statusCode == 200) {
+                        // cerramos el bottom sheet devolviendo true
+                        // ignore: use_build_context_synchronously
+                        Navigator.pop(ctx, true);
+                      } else {
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Error al enviar solicitud: ${resp.statusCode}',
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      // ignore: use_build_context_synchronously
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(
+                          content: Text('Error de red: $e'),
+                        ),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.send_outlined),
                   label: const Text('Enviar'),
@@ -268,7 +303,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     if (result == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Se ha enviado un mensaje al root')),
+        const SnackBar(
+          content: Text(
+            'Se ha enviado una solicitud al root. Si tu correo está registrado, se contactarán contigo.',
+          ),
+        ),
       );
     }
   }
