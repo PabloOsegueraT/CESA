@@ -29,8 +29,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final r = serverRole.trim().toLowerCase();
     if (r == 'root') return 'Root';
     if (r == 'admin') {
-      // Si decides tratar a cierto admin como Root (opcional):
-      // if (email.toLowerCase() == 'root@demo.com') return 'Root';
       return 'Administrador';
     }
     return 'Usuario';
@@ -50,24 +48,19 @@ class _LoginScreenState extends State<LoginScreen> {
       final auth = AuthControllerProvider.of(context);
       auth.setRole(role);
 
-      // Si quieres poblar el perfil (opcional):
+      // Poblar perfil
       final profile = ProfileControllerProvider.maybeOf(context);
-
-      // Convertimos dto.id (String) a int?
       final int? userIdInt = int.tryParse(dto.id.toString());
 
       profile?.setFromBackend({
-        'id': userIdInt,                           // entero
+        'id': userIdInt,
         'name': dto.name.isEmpty ? dto.email : dto.name,
         'email': dto.email,
-        'role': role.toLowerCase(),               // 'root' | 'admin' | 'usuario'
-        'phone': null,                            // si aún no los tienes
+        'role': role.toLowerCase(), // 'root' | 'admin' | 'usuario'
+        'phone': null,
         'about': null,
         'avatar_url': null,
       });
-
-      // TODO: guardar tokens en almacenamiento seguro si los usas:
-      // dto.accessToken / dto.refreshToken
 
       if (!mounted) return;
       if (role == 'Usuario') {
@@ -87,13 +80,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // 🔁 Invertido:
+    //   - Tema oscuro  -> logo_claro
+    //   - Tema claro   -> logo_oscuro
+    final logoPath = isDark
+        ? 'assets/images/logo_light.png' // versión clara
+        : 'assets/images/logo_dark.png'; // versión oscura
+
+    // Tamaño responsivo del logo
+    final size = MediaQuery.of(context).size;
+    final padding = MediaQuery.of(context).padding;
+    final availableHeight = size.height - padding.top - kToolbarHeight;
+    final logoHeight =
+    (availableHeight * 0.32).clamp(170.0, 320.0); // más grande pero seguro
+
     return Scaffold(
       appBar: AppBar(title: const Text('Iniciar sesión')),
+      resizeToAvoidBottomInset: true,
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Form(
               key: _formKey,
               child: Column(
@@ -101,6 +112,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 16),
+
+                  // LOGO
+                  Center(
+                    child: SizedBox(
+                      height: logoHeight,
+                      child: Image.asset(
+                        logoPath,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
                   TextFormField(
                     controller: _email,
                     decoration: const InputDecoration(
@@ -111,7 +136,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     validator: (v) {
                       final txt = (v ?? '').trim();
                       if (txt.isEmpty) return 'Requerido';
-                      final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(txt);
+                      final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                          .hasMatch(txt);
                       return ok ? null : 'Correo inválido';
                     },
                   ),
@@ -123,10 +149,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'Contraseña',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(_obscure
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _obscure = !_obscure),
+                        icon: Icon(
+                          _obscure
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
                       ),
                     ),
                     validator: (v) {
@@ -146,9 +175,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   Center(
                     child: TextButton.icon(
-                      onPressed: () => _showForgotPassword(context, prefillEmail: _email.text),
+                      onPressed: () => _showForgotPassword(
+                        context,
+                        prefillEmail: _email.text,
+                      ),
                       icon: const Icon(Icons.help_outline),
-                      label: const Text('¿Olvidaste tu contraseña?'),
+                      label:
+                      const Text('¿Olvidaste tu contraseña?'),
                     ),
                   ),
                 ],
@@ -160,7 +193,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _showForgotPassword(BuildContext context, {String? prefillEmail}) async {
+  Future<void> _showForgotPassword(BuildContext context,
+      {String? prefillEmail}) async {
     final formKey = GlobalKey<FormState>();
     final emailCtrl = TextEditingController(text: prefillEmail ?? '');
 
@@ -183,12 +217,20 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Text(
                   'Recuperar contraseña',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   'Escribe tu correo para que el administrador (root) pueda ayudarte a restablecerla.',
-                  style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface.withOpacity(.7)),
+                  style: TextStyle(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(.7),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -201,7 +243,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (v) {
                     final txt = (v ?? '').trim();
                     if (txt.isEmpty) return 'Requerido';
-                    final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(txt);
+                    final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                        .hasMatch(txt);
                     return ok ? null : 'Correo inválido';
                   },
                 ),
