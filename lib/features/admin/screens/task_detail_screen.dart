@@ -477,16 +477,23 @@ class _UserTaskDetailScreenState extends State<UserTaskDetailScreen> {
   }
 
   String _formatCommentDate(DateTime d) {
+    final local = d.toLocal(); // por si acaso
+
     final now = DateTime.now();
     final sameDay =
-        d.year == now.year && d.month == now.month && d.day == now.day;
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
+        local.year == now.year &&
+            local.month == now.month &&
+            local.day == now.day;
+
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
 
     if (sameDay) {
       return 'Hoy $hh:$mm';
     }
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} $hh:$mm';
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')} '
+        '$hh:$mm';
   }
 
   void _openAttachmentPreview(BuildContext context, TaskAttachment a) {
