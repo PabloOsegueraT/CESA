@@ -1,4 +1,5 @@
 // lib/features/admin/screens/dashboard_screen.dart
+// lib/features/admin/screens/dashboard_screen.dart
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -68,7 +69,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _error = false;
   String? _errorMessage;
 
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _selectedMonth =
+  DateTime(DateTime.now().year, DateTime.now().month);
 
   static const _monthNames = [
     'enero',
@@ -171,42 +173,94 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onRefresh: _loadSummary,
           child: CustomScrollView(
             slivers: [
+              // ---------- HEADER RESPONSIVO ----------
               SliverToBoxAdapter(
                 child: Padding(
                   padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.analytics_outlined,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Resumen general',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: _loading ? null : () => _changeMonth(-1),
-                        icon: const Icon(Icons.chevron_left),
-                        tooltip: 'Mes anterior',
-                      ),
-                      Text(
-                        _monthLabel,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      IconButton(
-                        onPressed: _loading ? null : () => _changeMonth(1),
-                        icon: const Icon(Icons.chevron_right),
-                        tooltip: 'Mes siguiente',
-                      ),
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isSmall = constraints.maxWidth < 380;
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.analytics_outlined,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Resumen general',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isSmall ? 6 : 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              color: theme.colorScheme.surfaceVariant
+                                  .withOpacity(0.3),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: _loading
+                                      ? null
+                                      : () => _changeMonth(-1),
+                                  icon: const Icon(
+                                    Icons.chevron_left,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                ConstrainedBox(
+                                  constraints:
+                                  const BoxConstraints(maxWidth: 130),
+                                  child: Text(
+                                    _monthLabel,
+                                    style: theme.textTheme.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed:
+                                  _loading ? null : () => _changeMonth(1),
+                                  icon: const Icon(
+                                    Icons.chevron_right,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
+
+              // ---------- CONTENIDO ----------
               SliverToBoxAdapter(
                 child: Padding(
                   padding:
@@ -270,6 +324,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final spacing = 12.0;
         final cardWidth =
             (constraints.maxWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
+
+        // MÁS ALTAS EN CELULAR PARA QUE NO SE VEA AMONTONADO
+        final chartHeight = isSmall ? 380.0 : 320.0;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -350,14 +407,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
             // -------- GRÁFICA ESTADOS --------
             _DashboardChartCard(
-              height: isSmall ? 260 : 280,
+              height: chartHeight,
               child: _buildStatusChart(context, s, isSmall),
             ),
             const SizedBox(height: 16),
 
             // -------- GRÁFICA PRIORIDADES --------
             _DashboardChartCard(
-              height: isSmall ? 260 : 280,
+              height: chartHeight,
               child: _buildPriorityChart(context, s, isSmall),
             ),
             const SizedBox(height: 24),
@@ -376,10 +433,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
 
-    final radius = isSmall ? 55.0 : 70.0;
-    final fontSize = isSmall ? 12.0 : 14.0;
+    final radius = isSmall ? 52.0 : 70.0;
+    final fontSize = isSmall ? 11.0 : 14.0;
 
-    List<PieChartSectionData> sections = [];
+    final sections = <PieChartSectionData>[];
 
     if (s.pending > 0) {
       sections.add(
@@ -393,8 +450,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
-          // un poco hacia afuera para que no se junten tanto
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -410,7 +466,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -426,7 +482,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -438,22 +494,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           'Distribución por estado',
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           'Pendientes, en proceso y completadas para el mes seleccionado',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 12),
-        Expanded(
+        const SizedBox(height: 16),
+        SizedBox(
+          height: isSmall ? 210 : 200,
           child: PieChart(
             PieChartData(
               sections: sections,
               sectionsSpace: 4,
-              centerSpaceRadius: isSmall ? 45 : 40,
+              centerSpaceRadius: isSmall ? 42 : 40,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 16,
           runSpacing: 4,
@@ -476,10 +533,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
 
-    final radius = isSmall ? 55.0 : 70.0;
-    final fontSize = isSmall ? 12.0 : 14.0;
+    final radius = isSmall ? 52.0 : 70.0;
+    final fontSize = isSmall ? 11.0 : 14.0;
 
-    List<PieChartSectionData> sections = [];
+    final sections = <PieChartSectionData>[];
 
     if (s.low > 0) {
       sections.add(
@@ -493,7 +550,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -509,7 +566,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -525,7 +582,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
-          titlePositionPercentageOffset: 0.7,
+          titlePositionPercentageOffset: 0.8,
         ),
       );
     }
@@ -537,22 +594,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           'Distribución por prioridad',
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           'Cuántas tareas hay por prioridad (baja, media, alta) este mes',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 12),
-        Expanded(
+        const SizedBox(height: 16),
+        SizedBox(
+          height: isSmall ? 210 : 200,
           child: PieChart(
             PieChartData(
               sections: sections,
               sectionsSpace: 4,
-              centerSpaceRadius: isSmall ? 45 : 40,
+              centerSpaceRadius: isSmall ? 42 : 40,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 16,
           runSpacing: 4,
