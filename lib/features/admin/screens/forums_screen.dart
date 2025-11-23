@@ -283,8 +283,14 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
   Widget build(BuildContext context) {
     final profile = ProfileControllerProvider.maybeOf(context);
     final int currentUserId = profile?.userId ?? 0;
-    final String role = (profile?.roleLabel ?? '').toLowerCase();
-    final bool isRoot = role == 'root';
+
+    // Normalizamos el rol
+    final String rawRole = (profile?.roleLabel ?? '');
+    final String normRole = rawRole.toLowerCase().trim();
+
+    // Aceptamos 'admin' y 'administrador'
+    final bool canDeleteForum =
+        normRole == 'root' || normRole == 'admin' || normRole == 'administrador';
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
@@ -332,7 +338,7 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
                   ),
                 ],
               ),
-              if (isRoot) ...[
+              if (canDeleteForum) ...[
                 const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20),
@@ -398,12 +404,18 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
 
   Future<void> _confirmDeleteForum(Forum forum, int index) async {
     final profile = ProfileControllerProvider.maybeOf(context);
-    final role = (profile?.roleLabel ?? '').toLowerCase(); // 👈 ajusta si tu getter se llama distinto
+    final rawRole = (profile?.roleLabel ?? '');
+    final normRole = rawRole.toLowerCase().trim();
     final userId = profile?.userId?.toString() ?? '1';
 
-    if (role != 'root') {
+    final bool canDelete =
+        normRole == 'root' || normRole == 'admin' || normRole == 'administrador';
+
+    if (!canDelete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Solo el usuario root puede eliminar foros')),
+        const SnackBar(
+          content: Text('Solo admin o root pueden eliminar foros'),
+        ),
       );
       return;
     }
@@ -432,18 +444,27 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
 
     if (ok != true) return;
 
-    await _deleteForumFromApi(forum, index, userId);
+    await _deleteForumFromApi(forum, index, userId, normRole);
   }
 
-  Future<void> _deleteForumFromApi(Forum forum, int index, String userId) async {
+  Future<void> _deleteForumFromApi(
+      Forum forum,
+      int index,
+      String userId,
+      String role,
+      ) async {
     try {
+      // Normalizamos lo que vamos a mandar al backend
+      final String headerRole =
+      role == 'root' ? 'root' : 'admin'; // si no es root, lo tratamos como admin
+
       final uri = Uri.parse('${Env.apiBaseUrl}/api/forums/${forum.id}');
       final resp = await http.delete(
         uri,
         headers: {
           'Content-Type': 'application/json',
-          'x-role': 'root',      // 👈 IMPORTANTE: root
-          'x-user-id': userId,   // por si quieres saber quién lo borró
+          'x-role': headerRole,  // <-- aquí va 'admin' o 'root'
+          'x-user-id': userId,
         },
       );
 
