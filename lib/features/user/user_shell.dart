@@ -1,27 +1,24 @@
 // lib/features/user/user_shell.dart
-
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/constants/env.dart';
-import '../../models/task.dart';
-import '../../models/forum.dart';
 import '../../design_system/widgets/task_card.dart';
-import '../admin/screens/task_detail_screen.dart';
-import '../admin/screens/fullscreen_image_screen.dart';
-import 'screens/calendar_screen.dart';
-import '../../state/profile_controller.dart';
-import 'screens/progress_screen.dart';
+import '../../models/forum.dart';
+import '../../models/task.dart';
 import '../../models/user_dashboard_summary.dart';
-
+import '../../state/profile_controller.dart';
+import '../admin/screens/fullscreen_image_screen.dart';
+import '../admin/screens/task_detail_screen.dart';
 
 class UserShell extends StatefulWidget {
   const UserShell({super.key});
@@ -41,7 +38,7 @@ class _UserShellState extends State<UserShell> {
 
     // Ejecutar después del primer frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadMyTasks(); // ✅ aquí ya puedes usar ScaffoldMessenger.of(context)
+      _loadMyTasks();
     });
   }
 
@@ -49,7 +46,6 @@ class _UserShellState extends State<UserShell> {
     setState(() => _loading = true);
 
     try {
-      // Obtenemos el perfil para saber el userId
       final profile = ProfileControllerProvider.maybeOf(context);
       final userId = profile?.userId;
 
@@ -70,7 +66,6 @@ class _UserShellState extends State<UserShell> {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          // En este módulo el usuario es "Usuario"
           'x-role': 'usuario',
           'x-user-id': userId.toString(),
         },
@@ -132,22 +127,20 @@ class _UserShellState extends State<UserShell> {
       );
     }
 
-    // Las tareas que llegan de /api/tasks/my ya son de este usuario,
-    // pero igual filtramos por nombre por seguridad.
+    // Por seguridad, solo las que están asignadas a este usuario
     final myTasks = _tasks.where((t) => t.assignee == userName).toList();
 
     final pages = [
-      _UserTasksList(
+      _UserTasksCalendarPage(
         tasks: myTasks,
         onTaskUpdated: _onTaskUpdated,
       ),
-      UserCalendarScreen(tasks: myTasks),
       const _UserForumsScreen(),
       const _UserProgressScreen(),
       const _UserMoreScreen(),
     ];
 
-    final titles = ['Mis tareas', 'Calendario', 'Foros', 'Progreso', 'Más'];
+    final titles = ['Mis tareas', 'Foros', 'Progreso', 'Más'];
 
     return Scaffold(
       appBar: AppBar(title: Text(titles[_tab])),
@@ -159,10 +152,6 @@ class _UserShellState extends State<UserShell> {
           NavigationDestination(
             icon: Icon(Icons.check_circle_outlined),
             label: 'Tareas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_today_outlined),
-            label: 'Calendario',
           ),
           NavigationDestination(
             icon: Icon(Icons.forum_outlined),
@@ -178,77 +167,224 @@ class _UserShellState extends State<UserShell> {
           ),
         ],
       ),
-      floatingActionButton: _tab == 0
-          ? FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Subir evidencia (demo)')),
-          );
-        },
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Subir evidencia'),
-      )
-          : null,
+      // ⛔ Sin botón flotante "Subir evidencia" aquí
     );
   }
 }
 
-class _UserTasksList extends StatefulWidget {
-  final List<Task> tasks;
-  final void Function(Task) onTaskUpdated; // 👈 callback al padre
+/* ============================================================
+ *  PÁGINA 1: MIS TAREAS (CALENDARIO + LISTA) – RESPONSIVE
+ * ========================================================== */
 
-  const _UserTasksList({
+class _UserTasksCalendarPage extends StatefulWidget {
+  final List<Task> tasks;
+  final void Function(Task) onTaskUpdated;
+
+  const _UserTasksCalendarPage({
     required this.tasks,
     required this.onTaskUpdated,
   });
 
   @override
-  State<_UserTasksList> createState() => _UserTasksListState();
+  State<_UserTasksCalendarPage> createState() => _UserTasksCalendarPageState();
 }
 
-class _UserTasksListState extends State<_UserTasksList> {
+class _UserTasksCalendarPageState extends State<_UserTasksCalendarPage> {
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDay = DateTime.now();
+  }
+
+  List<Task> _tasksForDay(DateTime day) {
+    return widget.tasks
+        .where((t) => isSameDay(t.dueDate, day))
+        .toList()
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (widget.tasks.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text('No tienes tareas asignadas'),
-        ),
-      );
-    }
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+        final selectedDay = _selectedDay ?? DateTime.now();
+        final tasksForDay = _tasksForDay(selectedDay);
 
-    final profile = ProfileControllerProvider.maybeOf(context);
-    final int userId = profile?.userId ?? 0;
+        // Todo es scrollable → no hay overflow
+        final child = isWide
+            ? Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Calendario
+            Expanded(
+              flex: 4,
+              child: _buildCalendarCard(context),
+            ),
+            const SizedBox(width: 16),
+            // Lista de tareas del día
+            Expanded(
+              flex: 6,
+              child:
+              _buildTasksForDayCard(context, selectedDay, tasksForDay),
+            ),
+          ],
+        )
+            : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildCalendarCard(context),
+            const SizedBox(height: 16),
+            _buildTasksForDayCard(context, selectedDay, tasksForDay),
+          ],
+        );
 
-    return ListView.builder(
-      itemCount: widget.tasks.length,
-      itemBuilder: (_, i) => TaskCard(
-        task: widget.tasks[i],
-        onTap: () async {
-          final updated = await Navigator.of(context).push<Task>(
-            MaterialPageRoute(
-              builder: (_) => UserTaskDetailScreen(
-                task: widget.tasks[i],
-                role: 'usuario',
-                userId: userId,
-                canManageTask: false, // el usuario no edita meta de la tarea
-                canDeleteAttachments:
-                true, // pero SÍ puede borrar sus evidencias
+        return RefreshIndicator(
+          onRefresh: () async {
+            // el shell padre recarga, aquí solo hacemos un setState dummy
+            setState(() {});
+          },
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCalendarCard(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Calendario de mis tareas',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
             ),
-          );
-          if (updated != null) {
-            widget.onTaskUpdated(updated);
-          }
-        },
-        onMore: () => _changeStatus(context, i),
+            const SizedBox(height: 4),
+            Text(
+              'Toca un día para ver las tareas que vencen en esa fecha.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TableCalendar<Task>(
+              locale: 'es_MX',
+              firstDay: DateTime(2020),
+              lastDay: DateTime(2035),
+              focusedDay: _focusedDay,
+              calendarFormat: CalendarFormat.month,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              eventLoader: (day) => _tasksForDay(day),
+              startingDayOfWeek: StartingDayOfWeek.monday,
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+              ),
+              calendarStyle: const CalendarStyle(
+                markerDecoration: BoxDecoration(
+                  color: Colors.deepPurple,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _changeStatus(BuildContext context, int i) {
-    final t = widget.tasks[i];
+  Widget _buildTasksForDayCard(
+      BuildContext context,
+      DateTime day,
+      List<Task> tasksForDay,
+      ) {
+    final profile = ProfileControllerProvider.maybeOf(context);
+    final int userId = profile?.userId ?? 0;
+
+    final dayLabel = DateFormat('d MMM yyyy', 'es_MX').format(day);
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Tareas para $dayLabel',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Toca una tarea para ver detalles, subir evidencias y cambiar su estado.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (tasksForDay.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text('No tienes tareas con fecha límite este día.'),
+                ),
+              )
+            else
+              ListView.separated(
+                itemCount: tasksForDay.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final task = tasksForDay[i];
+                  return TaskCard(
+                    task: task,
+                    onTap: () async {
+                      final updated =
+                      await Navigator.of(context).push<Task>(
+                        MaterialPageRoute(
+                          builder: (_) => UserTaskDetailScreen(
+                            task: task,
+                            role: 'usuario',
+                            userId: userId,
+                            canManageTask: false,
+                            canDeleteAttachments: true,
+                          ),
+                        ),
+                      );
+                      if (updated != null) {
+                        // Actualiza en el shell padre
+                        widget.onTaskUpdated(updated);
+                        setState(() {});
+                      }
+                    },
+                    onMore: () => _changeStatus(context, task),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _changeStatus(BuildContext context, Task t) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -261,8 +397,9 @@ class _UserTasksListState extends State<_UserTasksList> {
               title: const Text('Marcar como Pendiente'),
               onTap: () {
                 final updated = t.copyWith(status: TaskStatus.pending);
-                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                widget.onTaskUpdated(updated);
                 Navigator.pop(context);
+                setState(() {});
               },
             ),
             ListTile(
@@ -270,8 +407,9 @@ class _UserTasksListState extends State<_UserTasksList> {
               title: const Text('Marcar como En proceso'),
               onTap: () {
                 final updated = t.copyWith(status: TaskStatus.inProgress);
-                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                widget.onTaskUpdated(updated);
                 Navigator.pop(context);
+                setState(() {});
               },
             ),
             ListTile(
@@ -279,8 +417,9 @@ class _UserTasksListState extends State<_UserTasksList> {
               title: const Text('Marcar como Completada'),
               onTap: () {
                 final updated = t.copyWith(status: TaskStatus.done);
-                widget.onTaskUpdated(updated); // 👈 actualiza en el padre
+                widget.onTaskUpdated(updated);
                 Navigator.pop(context);
+                setState(() {});
               },
             ),
             const SizedBox(height: 8),
@@ -308,7 +447,6 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
   @override
   void initState() {
     super.initState();
-    // Esperamos al primer frame para tener un context estable
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMyForums();
     });
@@ -318,7 +456,6 @@ class _UserForumsScreenState extends State<_UserForumsScreen> {
     setState(() => _loading = true);
 
     try {
-      // Necesitamos el userId para mandarlo en x-user-id
       final profile = ProfileControllerProvider.maybeOf(context);
       final userId = profile?.userId;
 
@@ -453,7 +590,6 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Cargamos los mensajes después del primer frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMessages();
     });
@@ -730,8 +866,7 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
         return;
       }
 
-      final url =
-          '${Env.apiBaseUrl}/api/forums/attachments/${att.id}/file';
+      final url = '${Env.apiBaseUrl}/api/forums/attachments/${att.id}/file';
 
       final headers = {
         'x-role': 'usuario',
@@ -864,7 +999,8 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
                           : Theme.of(context)
                           .colorScheme
                           .surfaceVariant,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius:
+                      BorderRadius.circular(12),
                     ),
                     child: Column(
                       crossAxisAlignment:
@@ -969,7 +1105,6 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             '${Env.apiBaseUrl}/api/forums/attachments/${att.id}/file';
 
         if (isImage) {
-          // Imagen en miniatura + pantalla completa al tocar
           return GestureDetector(
             onTap: () {
               Navigator.of(context).push(
@@ -1000,7 +1135,6 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
             ),
           );
         } else {
-          // Documento (PDF, Word, etc.)
           return GestureDetector(
             onTap: () => _openAttachmentFile(att),
             child: Container(
@@ -1031,7 +1165,9 @@ class _UserForumDetailScreenState extends State<_UserForumDetailScreen> {
 
 /* ============================
  *  PROGRESO – USUARIO
+ * (lo dejamos igual que ya tenías)
  * ========================== */
+
 
 class _UserProgressScreen extends StatefulWidget {
   const _UserProgressScreen();
@@ -1235,13 +1371,13 @@ class _UserProgressScreenState extends State<_UserProgressScreen> {
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
+                        children: const [
+                          Icon(
                             Icons.inbox_outlined,
                             size: 40,
                           ),
-                          const SizedBox(height: 12),
-                          const Text(
+                          SizedBox(height: 12),
+                          Text(
                             'Aún no tienes tareas registradas en este periodo.',
                             textAlign: TextAlign.center,
                           ),
@@ -1298,7 +1434,7 @@ class _UserProgressScreenState extends State<_UserProgressScreen> {
       ) {
     final double fullWidth = constraints.maxWidth;
     final double cardWidth =
-    isSmall ? fullWidth : (fullWidth - 16) / 2; // 2 por fila en pantallas grandes
+    isSmall ? fullWidth : (fullWidth - 16) / 2; // 2 por fila en grandes
 
     return Wrap(
       spacing: 12,
@@ -1431,14 +1567,16 @@ class _StatCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    style:
+                    Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    style:
+                    Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: cs.onSurface.withOpacity(0.7),
                     ),
                   ),
@@ -1460,6 +1598,7 @@ class _StatCard extends StatelessWidget {
 }
 
 /// Gráfica de progreso del usuario (usa fl_chart)
+/// Gráfica de progreso del usuario (usa fl_chart)
 class _UserProgressChart extends StatelessWidget {
   final List<double> points; // valores 0-100 (en este caso, conteos)
   final List<String> labels; // etiquetas eje X
@@ -1473,6 +1612,12 @@ class _UserProgressChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
 
+    // Calculamos el máximo y lo convertimos explícitamente a double
+    final double maxValue =
+    points.fold<double>(0, (m, v) => v > m ? v : m);
+    final double maxY =
+    ((maxValue + 1).clamp(1, double.infinity)).toDouble();
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 4,
@@ -1485,8 +1630,7 @@ class _UserProgressChart extends StatelessWidget {
               minX: 0,
               maxX: (points.length - 1).toDouble(),
               minY: 0,
-              maxY: (points.fold<double>(0, (m, v) => v > m ? v : m) + 1)
-                  .clamp(1, double.infinity),
+              maxY: maxY, // 👈 aquí ya es double
               gridData: FlGridData(
                 show: true,
                 horizontalInterval: 1,
@@ -1560,6 +1704,11 @@ class _UserProgressChart extends StatelessWidget {
     );
   }
 }
+
+
+//  👉 AQUÍ va tu implementación existente de _UserProgressScreen,
+//  _StatCard y _UserProgressChart (no la repito para no alargar más).
+//  No necesitan cambios para el problema del overflow en Mis tareas.
 
 /* ============================
  *  MÁS
