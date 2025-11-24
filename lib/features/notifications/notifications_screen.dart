@@ -31,26 +31,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   int? _lastUserId;
   String? _lastRole;
 
+  String _mapRoleToBackend(String raw) {
+    final v = raw.trim().toLowerCase();
+
+    if (v.contains('root')) return 'root';
+    if (v.contains('admin')) return 'admin';
+    // alumno, estudiante, usuario, etc.
+    return 'usuario';
+  }
+
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
     final profile = ProfileControllerProvider.maybeOf(context);
     final userId = profile?.userId ?? 0;
-    // Usa el código o label que tengas, pero en minúsculas
-    final role = (profile?.roleLabel ?? '').toLowerCase();
+    final role = _mapRoleToBackend(profile?.roleLabel ?? '');
+
 
     if (userId <= 0) return;
 
-    // ⚠️ Si cambió el usuario o el rol, recargamos notificaciones desde el backend
+    // Si cambió el usuario o el rol, recargamos notificaciones
     if (userId != _lastUserId || role != _lastRole) {
       _userId = userId;
       _role = role;
       _lastUserId = userId;
       _lastRole = role;
 
-      final ctrl = NotificationsControllerProvider.of(context);
-      ctrl.loadFromBackend(userId: userId, role: role);
+      // 👇 Muy importante: llamar loadFromBackend DESPUÉS del primer frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctrl = NotificationsControllerProvider.of(context);
+        ctrl.loadFromBackend(userId: _userId, role: _role);
+      });
     }
   }
 
@@ -108,10 +120,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       ),
                       ButtonSegment(
                         value: NotificationKind.activity,
-                        label:
-                        Text(compact ? 'Actividad' : 'Actividad'),
-                        icon:
-                        const Icon(Icons.checklist_outlined),
+                        label: Text(compact ? 'Actividad' : 'Actividad'),
+                        icon: const Icon(Icons.checklist_outlined),
                       ),
                     ];
 
@@ -154,18 +164,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               // Chips de eventos (solo cuando es Actividad)
               if (_kind == NotificationKind.activity)
                 Padding(
-                  padding:
-                  const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Wrap(
                     spacing: 8,
                     children: [
                       _chipEvent(ActivityEvent.created, 'Creada'),
                       _chipEvent(ActivityEvent.overdue, 'Vencida'),
-                      _chipEvent(
-                          ActivityEvent.inProgress, 'En proceso'),
+                      _chipEvent(ActivityEvent.inProgress, 'En proceso'),
                       _chipEvent(ActivityEvent.done, 'Terminada'),
-                      _chipEvent(
-                          ActivityEvent.failed, 'No lograda'),
+                      _chipEvent(ActivityEvent.failed, 'No lograda'),
                     ],
                   ),
                 ),
@@ -200,10 +207,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             'No tienes notificaciones con los filtros actuales',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withOpacity(.7),
+              color:
+              Theme.of(context).colorScheme.onSurface.withOpacity(.7),
             ),
           ),
         ),
@@ -248,16 +253,11 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final icon = switch (n.kind) {
       NotificationKind.activity => switch (n.activityEvent) {
-        ActivityEvent.created =>
-        Icons.add_task,
-        ActivityEvent.overdue =>
-        Icons.warning_amber_outlined,
-        ActivityEvent.inProgress =>
-        Icons.play_circle_outline,
-        ActivityEvent.done =>
-        Icons.task_alt,
-        ActivityEvent.failed =>
-        Icons.block_outlined,
+        ActivityEvent.created => Icons.add_task,
+        ActivityEvent.overdue => Icons.warning_amber_outlined,
+        ActivityEvent.inProgress => Icons.play_circle_outline,
+        ActivityEvent.done => Icons.task_alt,
+        ActivityEvent.failed => Icons.block_outlined,
         _ => Icons.checklist_outlined,
       },
       NotificationKind.passwordReset => Icons.key_outlined,
