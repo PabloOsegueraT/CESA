@@ -6,6 +6,7 @@ import '../../core/constants/env.dart';  // 👈 donde está Env.apiBaseUrl
 import '../../state/auth_controller.dart';
 import '../../state/profile_controller.dart';
 import '../../data/services/auth_api.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,6 +39,42 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'Usuario';
   }
 
+  Future<void> _registerFcmToken(int userId, String role) async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      final token = await messaging.getToken();
+      if (token == null) {
+        debugPrint('❌ No se pudo obtener el token FCM');
+        return;
+      }
+
+      debugPrint('✅ FCM token: $token');
+
+      final uri = Uri.parse('${Env.apiBaseUrl}/api/devices/register');
+      await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': role,          // 'root' | 'admin' | 'usuario'
+          'x-user-id': '$userId',
+        },
+        body: jsonEncode({
+          'token': token,
+          'platform': 'android',   // o 'web', 'ios', etc. si quieres distinguir
+        }),
+      );
+    } catch (e) {
+      debugPrint('Error registrando FCM token: $e');
+    }
+  }
+
   Future<void> _doLogin() async {
     FocusScope.of(context).unfocus();
 
@@ -66,6 +103,11 @@ class _LoginScreenState extends State<LoginScreen> {
         'avatar_url': null,
       });
 
+      // 👇 AQUÍ: registrar token FCM
+      if (userIdInt != null) {
+        await _registerFcmToken(userIdInt, role.toLowerCase());
+      }
+
       if (!mounted) return;
       if (role == 'Usuario') {
         Navigator.pushReplacementNamed(context, '/user');
@@ -81,6 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

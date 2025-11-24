@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "750280964233",
+    "firebase_url": "https://cesa-35f82-default-rtdb.firebaseio.com",
+    "project_id": "cesa-35f82",
+    "storage_bucket": "cesa-35f82.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:750280964233:android:ea41747c259283a438ee58",
+        "android_client_info": {
+          "package_name": "com.example.aplicacion2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC96s29tTXVP0wE3ZQntA4wwvmAm5moJkQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
