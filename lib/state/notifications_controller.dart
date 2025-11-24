@@ -31,10 +31,21 @@ class NotificationsController extends ChangeNotifier {
     required int userId,
     required String role,
   }) async {
+    // Evitar doble carga simultánea
     if (_isLoading) return;
 
+    // Si vienen mal, no pegues al backend (evitas el 401 tonto)
+    if (userId <= 0 || role.trim().isEmpty) {
+      debugPrint(
+          'NotificationsController.loadFromBackend: userId/role inválidos '
+              '(userId=$userId, role="$role")');
+      return;
+    }
+
     _isLoading = true;
-    notifyListeners();
+    // 🔴 OJO: NO hacemos notifyListeners aquí para no disparar el error
+    // "setState() or markNeedsBuild() called during build".
+    // El rebuild se hará cuando termine la petición HTTP.
 
     try {
       final uri = Uri.parse('${Env.apiBaseUrl}/api/notifications');
@@ -44,13 +55,18 @@ class NotificationsController extends ChangeNotifier {
         headers: {
           'Content-Type': 'application/json',
           'x-user-id': userId.toString(),
-          'x-role': role.toLowerCase(),
+          'x-role': role.toLowerCase(), // debe ser root|admin|usuario
         },
       );
 
       if (resp.statusCode != 200) {
         debugPrint(
-            'Error cargando notificaciones: ${resp.statusCode} ${resp.body}');
+          'Error cargando notificaciones: '
+              '${resp.statusCode} ${resp.body}',
+        );
+        // Para que la UI deje de mostrar "primera carga"
+        _loadedOnce = true;
+        notifyListeners();
         return;
       }
 
@@ -65,8 +81,11 @@ class NotificationsController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Excepción en loadFromBackend: $e');
+      _loadedOnce = true;
+      notifyListeners();
     } finally {
       _isLoading = false;
+      // Segundo notify para que la UI se entere que terminó el loading
       notifyListeners();
     }
   }
@@ -78,12 +97,16 @@ class NotificationsController extends ChangeNotifier {
     // id puede venir numérico o string
     final id = m['id']?.toString() ?? '';
 
-    // puede venir "kind" o "type"
-    final kindStr =
-    (m['kind'] ?? m['type'] ?? 'activity').toString().toLowerCase();
+    // El backend manda "type" = activity | forum | password_reset
+    final typeStr = (m['type'] ??
+        m['type_name'] ??
+        m['kind'] ??
+        'activity')
+        .toString()
+        .toLowerCase();
 
     final NotificationKind kind;
-    switch (kindStr) {
+    switch (typeStr) {
       case 'passwordreset':
       case 'password_reset':
       case 'restablecer_contraseña':
@@ -91,6 +114,8 @@ class NotificationsController extends ChangeNotifier {
         break;
       case 'forum':
       case 'foro':
+      case 'foro_mensaje':
+      case 'foro_nuevo':
         kind = NotificationKind.forum;
         break;
       default:
@@ -98,7 +123,8 @@ class NotificationsController extends ChangeNotifier {
     }
 
     // activityEvent opcional (puede venir null o string)
-    final eventStr = (m['activityEvent'] ?? m['activity_event'])?.toString();
+    final eventStr =
+    (m['activityEvent'] ?? m['activity_event'])?.toString();
     ActivityEvent? event;
     switch (eventStr) {
       case 'created':
@@ -122,15 +148,16 @@ class NotificationsController extends ChangeNotifier {
     }
 
     // Fecha (createdAt o created_at)
-    final createdRaw =
-        m['createdAt'] ?? m['created_at'] ?? DateTime.now().toIso8601String();
+    final createdRaw = m['createdAt'] ??
+        m['created_at'] ??
+        DateTime.now().toIso8601String();
     final createdAt =
         DateTime.tryParse(createdRaw.toString()) ?? DateTime.now();
 
-    // 🔴 IMPORTANTE: backend manda is_read como bool (true/false)
+    // Backend manda is_read como bool o 0/1
     final read = m['read'] == true ||
         m['is_read'] == true ||
-        m['is_read'] == 1; // por si algún día viene como 0/1
+        m['is_read'] == 1;
 
     return AppNotification(
       id: id,
@@ -187,7 +214,8 @@ class NotificationsController extends ChangeNotifier {
     required String role,
   }) async {
     try {
-      final uri = Uri.parse('${Env.apiBaseUrl}/api/notifications/$id/read');
+      final uri =
+      Uri.parse('${Env.apiBaseUrl}/api/notifications/$id/read');
 
       final resp = await http.put(
         uri,
@@ -202,7 +230,8 @@ class NotificationsController extends ChangeNotifier {
         markRead(id); // actualiza local
       } else {
         debugPrint(
-            'Error markReadRemote: ${resp.statusCode} ${resp.body}');
+          'Error markReadRemote: ${resp.statusCode} ${resp.body}',
+        );
       }
     } catch (e) {
       debugPrint('Excepción en markReadRemote: $e');
@@ -215,7 +244,8 @@ class NotificationsController extends ChangeNotifier {
     required String role,
   }) async {
     try {
-      final uri = Uri.parse('${Env.apiBaseUrl}/api/notifications/read-all');
+      final uri =
+      Uri.parse('${Env.apiBaseUrl}/api/notifications/read-all');
 
       final resp = await http.put(
         uri,
@@ -230,7 +260,8 @@ class NotificationsController extends ChangeNotifier {
         markAllRead(); // actualiza local
       } else {
         debugPrint(
-            'Error markAllReadRemote: ${resp.statusCode} ${resp.body}');
+          'Error markAllReadRemote: ${resp.statusCode} ${resp.body}',
+        );
       }
     } catch (e) {
       debugPrint('Excepción en markAllReadRemote: $e');
@@ -244,7 +275,8 @@ class NotificationsController extends ChangeNotifier {
     required String role,
   }) async {
     try {
-      final uri = Uri.parse('${Env.apiBaseUrl}/api/notifications/$id');
+      final uri =
+      Uri.parse('${Env.apiBaseUrl}/api/notifications/$id');
 
       final resp = await http.delete(
         uri,
@@ -259,7 +291,9 @@ class NotificationsController extends ChangeNotifier {
         removeLocal(id);
       } else {
         debugPrint(
-            'Error deleteNotificationRemote: ${resp.statusCode} ${resp.body}');
+          'Error deleteNotificationRemote: '
+              '${resp.statusCode} ${resp.body}',
+        );
       }
     } catch (e) {
       debugPrint('Excepción en deleteNotificationRemote: $e');
@@ -278,11 +312,13 @@ class NotificationsControllerProvider
 
   static NotificationsController of(BuildContext context) =>
       context
-          .dependOnInheritedWidgetOfExactType<NotificationsControllerProvider>()!
+          .dependOnInheritedWidgetOfExactType<
+          NotificationsControllerProvider>()!
           .notifier!;
 
   static NotificationsController? maybeOf(BuildContext context) =>
       context
-          .dependOnInheritedWidgetOfExactType<NotificationsControllerProvider>()
+          .dependOnInheritedWidgetOfExactType<
+          NotificationsControllerProvider>()
           ?.notifier;
 }
