@@ -141,7 +141,9 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error al cargar usuarios para asignar: ${resp.statusCode}'),
+              content: Text(
+                'Error al cargar usuarios para asignar: ${resp.statusCode}',
+              ),
             ),
           );
         }
@@ -151,7 +153,8 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error de red al cargar usuarios para asignar: $e'),
+            content:
+            Text('Error de red al cargar usuarios para asignar: $e'),
           ),
         );
       }
@@ -169,19 +172,20 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
       return;
     }
 
-    // 2) Nombres para el dropdown del formulario (ya NO demos)
+    // 2) Nombres para el dropdown del formulario
     final assigneeNames = users.map((u) => u['name'] as String).toList();
 
-    // 3) Abrir tu pantalla de formulario con nombres reales
+    // 3) Abrir formulario y esperar la Task local
     final Task? localTask = await Navigator.of(context).push<Task>(
       MaterialPageRoute(
         builder: (_) => AdminTaskFormScreen(assignees: assigneeNames),
       ),
     );
 
+    // Si canceló, no hacemos nada
     if (localTask == null) return;
 
-    // 4) Mapear prioridad enum -> string para el backend
+    // 4) Mapear prioridad enum -> string
     String priorityCode;
     switch (localTask.priority) {
       case TaskPriority.low:
@@ -208,9 +212,10 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
       'description': localTask.description,
       'priority': priorityCode,
       'dueDate': localTask.dueDate.toIso8601String().substring(0, 10),
-      'assigneeId': assigneeId, // ← aquí va el ID real de tu BD
+      'assigneeId': assigneeId,
     };
 
+    // 6) POST /api/tasks
     try {
       final uri = Uri.parse('${Env.apiBaseUrl}/api/tasks');
       final resp = await http.post(
@@ -226,14 +231,17 @@ class _AdminTasksScreenState extends State<AdminTasksScreen>
       if (resp.statusCode == 201) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final created = Task.fromJson(data);
-        if (mounted) {
-          setState(() {
-            _tasks.insert(0, created);
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tarea creada correctamente')),
-          );
-        }
+
+        if (!mounted) return;
+
+        // 🔥 AQUÍ ES DONDE SE ACTUALIZA LA LISTA, IGUAL QUE EN FOROS
+        setState(() {
+          _tasks.insert(0, created); // o _tasks.add(created);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tarea creada correctamente')),
+        );
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -17,13 +17,51 @@ import 'features/notifications/notifications_screen.dart';
 import 'state/auth_controller.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/user/user_shell.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'firebase_options.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Plugin global para notificaciones locales
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+FlutterLocalNotificationsPlugin();
+
+// Handler para mensajes en segundo plano (obligatorio para FCM)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // Aquí podrías hacer logs, etc.
+}
 
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar datos de fechas para español (México)
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await initializeDateFormatting('es_MX', null);
+
+// Android
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+// iOS (Darwin = iOS/macOS en versiones nuevas del plugin)
+  const darwinInit = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+// Inicialización combinada
+  const initSettings = InitializationSettings(
+    android: androidInit,
+    iOS: darwinInit,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initSettings);
 
   runApp(const TaskManagerApp());
 }
@@ -41,6 +79,35 @@ class _TaskManagerAppState extends State<TaskManagerApp> {
   final UsersController _users = UsersController();
   final NotificationsController _notifications = NotificationsController();
   final AuthController _auth = AuthController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Escuchar notificaciones cuando la app está en primer plano
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notification = message.notification;
+      if (notification == null) return;
+
+      const androidDetails = AndroidNotificationDetails(
+        'default_channel', // id del canal
+        'Notificaciones',  // nombre del canal
+        importance: Importance.max,
+        priority: Priority.high,
+      );
+
+      const notificationDetails = NotificationDetails(
+        android: androidDetails,
+      );
+
+      flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        notificationDetails,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

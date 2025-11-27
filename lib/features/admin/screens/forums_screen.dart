@@ -231,13 +231,14 @@ class AdminForumsScreenState extends State<AdminForumsScreen> {
                         jsonDecode(resp.body) as Map<String, dynamic>;
                         final newForum = Forum.fromJson(data);
 
-                        // Agregamos el foro a la lista local
-                        // (asumiendo que estás dentro del State de AdminForumsScreen)
-                        // ignore: use_build_context_synchronously
-                        (context as Element).markNeedsBuild();
-                        // mejor:
-                        // usamos el setState del State real:
-                        // pero estamos en otro State, así que:
+                        // 👇 Actualizamos la lista del estado principal
+                        if (mounted) {
+                          setState(() {
+                            // lo agregas al inicio de la lista
+                            forums.insert(0, newForum);
+                            // o al final, si prefieres: forums.add(newForum);
+                          });
+                        }
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
