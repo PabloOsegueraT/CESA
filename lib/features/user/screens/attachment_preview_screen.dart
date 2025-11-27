@@ -42,50 +42,26 @@ class AttachmentPreviewScreen extends StatelessWidget {
             top: false,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final uri = Uri.parse(url);
-                        final ok = await launchUrl(
-                          uri,
-                          mode: LaunchMode.inAppWebView,
-                        );
-                        if (!ok && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('No se pudo abrir la evidencia'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.visibility_outlined),
-                      label: const Text('Ver / Descargar'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        final uri = Uri.parse(url);
-                        final ok = await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                        if (!ok && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('No se pudo descargar'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.download_outlined),
-                      label: const Text('Abrir en otra app'),
-                    ),
-                  ),
-                ],
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(url);
+                    final ok = await launchUrl(
+                      uri,
+                      mode: LaunchMode.externalApplication,
+                    );
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No se pudo descargar / abrir la evidencia'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Abrir en otra app'),
+                ),
               ),
             ),
           ),
@@ -119,7 +95,7 @@ class AttachmentPreviewScreen extends StatelessWidget {
             const Icon(Icons.picture_as_pdf, size: 64),
             const SizedBox(height: 12),
             const Text(
-              'Vista previa de PDF no integrada.\nUsa el botón "Ver / Descargar".',
+              'Vista previa de PDF no integrada.\nUsa el botón de abajo para abrirlo.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -151,7 +127,7 @@ class AttachmentPreviewScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Usa los botones de abajo para abrir o descargar.',
+            'Usa el botón de abajo para abrir o descargar.',
             textAlign: TextAlign.center,
           ),
         ],

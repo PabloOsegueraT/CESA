@@ -20,6 +20,8 @@ import 'features/user/user_shell.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'firebase_options.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // Plugin global para notificaciones locales
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -36,18 +38,29 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1) Inicializar Firebase
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  // 2) Registrar handler de mensajes en background
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-  // 3) Inicializar datos de fechas para español (México)
   await initializeDateFormatting('es_MX', null);
 
-  // 4) Inicializar notificaciones locales (para mostrar cuando la app está abierta)
+// Android
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidInit);
+
+// iOS (Darwin = iOS/macOS en versiones nuevas del plugin)
+  const darwinInit = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+// Inicialización combinada
+  const initSettings = InitializationSettings(
+    android: androidInit,
+    iOS: darwinInit,
+  );
+
   await flutterLocalNotificationsPlugin.initialize(initSettings);
 
   runApp(const TaskManagerApp());
